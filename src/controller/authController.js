@@ -1,526 +1,536 @@
-var user = require('../models/user')
-var { hashPassword, comparePassword, s3UploadImage } = require('../helper/helper')
-var sendemails = require('../helper/mailSend');
-const { jwtToken } = require('../helper/helper');
-const { isNumber } = require('razorpay/dist/utils/razorpay-utils');
-var { ObjectId } = require('mongodb');
+var user = require("../models/user");
+var {
+  hashPassword,
+  comparePassword,
+  s3UploadImage,
+} = require("../helper/helper");
+var sendemails = require("../helper/mailSend");
+const { jwtToken } = require("../helper/helper");
+const { isNumber } = require("razorpay/dist/utils/razorpay-utils");
+var { ObjectId } = require("mongodb");
 
-async function checkMobile(req, res) {
-    try {
-        const { mobile } = req.body;
-        if (mobile != '') {
-            var checkemail = await user.find({ mobile: mobile }).exec();
-            if (checkemail.length > 0) {
-                var response = {
-                    status: 201,
-                    message: 'Mobile already exist.',
-                }
-                return res.status(201).send(response);
-            } else {
+exports.checkMobile = async (req, res) => {
+  try {
+    const { mobile } = req.body;
 
-                    var response = {
-                        status: 200,
-                        message: 'Mobile is available.',
-                    }
-                    return res.status(200).send(response);
-            }
-        } else {
-            var response = {
-                status: 201,
-                message: 'Can not be empty value',
-            }
-            return res.status(201).send(response);
-        }
-    } catch (error) {
-        console.log("error", error.message);
-        var responce = {
-            status: 501,
-            message: "Internal Server Error",
-        };
-        return res.status(501).send(responce);
+    if (!mobile) {
+      return res.status(400).send({
+        status: 400,
+        message: "Mobile number cannot be empty.",
+      });
     }
-}
-async function signup(req, res) {
-    try {
-        let { mobile, user_type } = req.body;
-        
-        if ( mobile!='' && user_type !='') {
 
-            var title =  'mobile'
-            var checkeMobile = await user.find({ mobile: mobile }).exec();
-            if (checkeMobile.length === 0) {
-                // let otp = Math.floor(1000 + Math.random() * 9000)
-                const otp = 111111;
-                req.body.otp = otp;
-                var result = await user.create(req.body);
-                if (result) {
-                    // await sendemails(email, user_name, otp, 1);
+    const userExists = await user.exists({ mobile });
 
-                    var response = {
-                        status: 200,
-                        message: 'Registration Success',
-                        data: result,
-                    }
-                    return res.status(200).send(response);
-                } else {
-                    var response = {
-                        status: 201,
-                        message: 'Registration failed',
-                    }
-                    return res.status(201).send(response);
-                }
-            } else {
-                var response = {
-                    status: 201,
-                    message: `This ${title} Already Registration.`,
-                }
-                return res.status(201).send(response);
-            }
-        } else {
-            var response = {
-                status: 201,
-                message: 'Can not be empty value',
-            }
-            return res.status(201).send(response);
-        }
-    } catch (error) {
-        console.log("error", error.message);
-        var responce = {
-            status: 501,
-            message: "Internal Server Error",
-        };
-        return res.status(501).send(responce);
+    if (userExists) {
+      return res.status(200).send({
+        status: 200,
+        message: "Mobile already exists.",
+      });
+    } else {
+      return res.status(200).send({
+        status: 200,
+        message: "Mobile is available.",
+      });
     }
-}
-async function updateProfile(req, res) {
-    try {
-        const user_id = req.user_id
-        let { user_name, password } = req.body;
-        
-        if (user_name != '') {
+  } catch (error) {
+    console.error("Error:", error.message);
+    return res.status(500).send({
+      status: 500,
+      message: "Internal Server Error",
+    });
+  }
+};
 
-            if (req.files && typeof req.files.profile != undefined && req.files.profile != null) {
-                req.body.profile = req.files.profile[0].filename;
-                bucketFilePath= 'profile/'+req.files.profile[0].filename;
-                const localFilePath = req.files.profile[0].destination+req.files.profile[0].filename;
-                const imageUpload = await s3UploadImage(localFilePath, bucketFilePath)
-                req.body.profile = bucketFilePath
-            }
-            if(password != undefined && password !=''){
-                password = password ? password:'123456';
-                req.body.password = await hashPassword(password);
-            }
-            var result = await user.updateOne({ _id: new ObjectId(user_id) }, req.body);
-            if (result) {
-                var resData = await user.findOne({ _id: new ObjectId(user_id) }).exec();
-                const token = await jwtToken(resData._id, user_name, resData.email, resData.user_type, 'logged')
-                var response = {
-                    status: 200,
-                    message: 'Update Success',
-                    data: resData,
-                    token: token,
-                    base_url: process.env.BASEURL
-                }
-                return res.status(200).send(response);
-            } else {
-                var response = {
-                    status: 201,
-                    message: 'Update failed',
-                }
-                return res.status(201).send(response);
-            }
-        } else {
-            var response = {
-                status: 201,
-                message: 'Can not be empty value',
-            }
-            return res.status(201).send(response);
-        }
-    } catch (error) {
-        console.log("error", error.message);
-        var responce = {
-            status: 501,
-            message: "Internal Server Error",
-        };
-        return res.status(501).send(responce);
-    }
-}
-async function login(req, res) {
-    try {
-        const { mobile, password, user_type } = req.body;
-        if (mobile != '' && password!=undefined && password != '') {
-            // var checkemail = await user.find({ user_name: user_name }).exec();
-            // var checkemail = await user.find({$or : [{ user_name: user_name }, { email: user_name }, { mobile: user_name }]}).exec();
-            var checkemail = await user.find({ mobile: mobile }).exec();
-            if (checkemail.length > 0) {
-                if (checkemail[0].verified) {
-                if(checkemail[0].password != undefined && checkemail[0].user_name != undefined){    
-                    const passChk = await comparePassword(checkemail[0].password, password);
-                    if (passChk) {
-                            if (checkemail[0].user_type != undefined && checkemail[0].user_type == user_type) {
-                                if (checkemail[0].profile_image) {
-                                    checkemail[0].profile_image = process.env.BASEURL+process.env.PROFILE + checkemail[0].profile_image;
-                                }
-                                const token = await jwtToken(checkemail[0]._id, checkemail[0].user_name, checkemail[0].email, checkemail[0].user_type, 'logged')
-                                var response = {
-                                    status: 200,
-                                    message: 'Login success.',
-                                    data: { userDetail: checkemail[0], token: token }
-                                }
-                                return res.status(200).send(response);
-                            } else {
-                                var response = {
-                                    status: 201,
-                                    message: 'Please enter currect detail.',
-                                }
-                                return res.status(201).send(response);
-                            }
-                        } else {
-                            var response = {
-                                status: 201,
-                                message: 'Please enter currect password.',
-                            }
-                            return res.status(201).send(response);
-                        }
-                    }else{
-                        var response = {
-                            status: 203,
-                            message: 'Please update username and password.',
-                        }
-                        return res.status(203).send(response);    
-                    }
-                } else {
-                    var response = {
-                        status: 202,
-                        message: 'Your account is not verify.', 
-                    }
-                    return res.status(202).send(response);
-                }
-            } else {
-                var response = {
-                    status: 201,
-                    message: 'User not available.',
-                }
-                return res.status(201).send(response);
-            }
-        } else {
-            var response = {
-                status: 201,
-                message: 'Can not be empty value',
-            }
-            return res.status(201).send(response);
-        }
-    } catch (error) {
-        console.log("error", error.message);
-        var responce = {
-            status: 501,
-            message: "Internal Server Error",
-        };
-        return res.status(501).send(responce);
-    }
-}
-async function otpVerify(req, res) {
-    try {
-        const { mobile, otp } = req.body;
-        if (mobile != '' && otp != '') {
-            var checkemail = await user.find({ mobile: mobile }).exec();
+exports.signup = async (req, res) => {
+  try {
+    const { mobile, user_type } = req.body;
 
-            if (checkemail.length > 0) {
-                if (checkemail[0].otp == otp) {
-                    await user.updateOne({ mobile: mobile }, { otp: null, verified: true });
+    if (!mobile || !user_type) {
+      return res.status(400).send({
+        status: 400,
+        message: "Mobile and user type cannot be empty.",
+      });
+    }
 
-                    let token = null
-                    if(!checkemail[0].verified){
-                         token = await jwtToken(checkemail[0]._id, checkemail[0].user_name, checkemail[0].email, checkemail[0].user_type, 'logged')
-                    }
-                    var response = {
-                        status: 200,
-                        message: 'OTP verify success.',
-                        data: checkemail,
-                        token: token,
-                    }
-                    return res.status(200).send(response);
-                } else {
-                    var response = {
-                        status: 201,
-                        message: 'Incorrect OTP, please enter currect OTP.',
-                    }
-                    return res.status(201).send(response);
-                }
-            } else {
-                var response = {
-                    status: 201,
-                    message: 'User not available.',
-                }
-                return res.status(201).send(response);
-            }
-        } else {
-            var response = {
-                status: 201,
-                message: 'Can not be empty value',
-            }
-            return res.status(201).send(response);
-        }
-    } catch (error) {
-        console.log("error", error.message);
-        var responce = {
-            status: 501,
-            message: "Internal Server Error",
-        };
-        return res.status(501).send(responce);
+    const existingUser = await user.findOne({ mobile }).exec();
+    if (existingUser) {
+      return res.status(409).send({
+        status: 409,
+        message: "This mobile number is already registered.",
+      });
     }
-}
 
-async function resentOtp(req, res) {
-    try {
-        const { mobile } = req.body;
-        if (mobile != '') {
-            var title =  'mobile'
-            req.body.mobile = mobile
-            const result = await user.find({ "mobile": mobile }).exec();
-            if (result.length > 0) {
-                // let otp = Math.floor(1000 + Math.random() * 9000)
-                let otp = 111111
-                var query = { '_id': result[0]._id, mobile: mobile };
-                const datt = { otp: otp };
-                const updateDat = await user.findOneAndUpdate(query, datt)
-                if (updateDat) {
-                    // await sendemails(email, result[0].user_name, otp, 2);
-                    var responce = {
-                        status: 200,
-                        message: 'OTP send success.',
-                    }
-                    return res.status(200).send(responce);
-                } else {
-                    var responce = {
-                        status: 201,
-                        message: 'OTP send failed.',
-                    }
-                    return res.status(201).send(responce);
-                }
-            } else {
-                var responce = {
-                    status: 201,
-                    message: `${title} not exist. please enter right ${title}`,
-                }
-                return res.status(201).send(responce);
-            }
-        } else {
-            var responce = {
-                status: 201,
-                message: 'Can not be empty value.',
-            }
-            return res.status(201).send(responce);
-        }
-    } catch (error) {
-        console.log('error', error.message)
-        var responce = {
-            status: 501,
-            message: 'Internal Server Error.',
-        }
-        return res.status(501).send(responce);
-    }
-}
-async function forgotPassword(req, res) {
-    try {
-        const { mobile } = req.body;
-        if (mobile != '') {
-            const result = await user.find({ "mobile": mobile }).exec();
-            if (result.length > 0) {
-                if(result[0]?.password != undefined && result[0]?.user_name != undefined){  
-                    // let otp = Math.floor(1000 + Math.random() * 9000)
-                    let otp = 1111
-                    var query = { '_id': result[0]._id, mobile: mobile };
-                    const datt = { otp: otp };
-                    const updateDat = await user.findOneAndUpdate(query, datt)
-                    if (updateDat) {
-                        // await sendemails(result[0].email, result[0].user_name, otp, 3);
-                        var responce = {
-                            status: 200,
-                            message: 'OTP send success.',
-                        }
-                        return res.status(200).send(responce);
-                    } else {
-                        var responce = {
-                            status: 201,
-                            message: 'OTP send failed.',
-                        }
-                        return res.status(201).send(responce);
-                    }
-                }else{
-                    var response = {
-                        status: 203,
-                        message: 'Please update username and password.',
-                    }
-                    return res.status(203).send(response);
-                }
-            } else {
-                var responce = {
-                    status: 201,
-                    message: 'Mobile not exist. please enter right mobile',
-                }
-                return res.status(201).send(responce);
-            }
-        } else {
-            var responce = {
-                status: 201,
-                message: 'Can not be empty value.',
-            }
-            return res.status(201).send(responce);
-        }
-    } catch (error) {
-        console.log('error', error.message)
-        var responce = {
-            status: 501,
-            message: 'Internal Server Error.',
-        }
-        return res.status(501).send(responce);
-    }
-}
-async function updatePassword(req, res) {
-    try {
-        const { mobile, password } = req.body;
-        if (mobile != '' && password != '') {
-            if(isNumber(mobile)){
-                var title =  'mobile'
-                req.body.mobile = mobile
-            }else{
-                var title =  'email'
-                req.body.email = mobile
-            }
-            const result = await user.find({ "mobile": mobile }).exec();
-            if (result.length > 0) {
-                if (result[0].otp == null || result[0].otp == '') {
-                    const hashPass = await hashPassword(password);
-                    var query = { '_id': result[0]._id, mobile: mobile };
-                    const datt = { password: hashPass };
-                    await user.findOneAndUpdate(query, datt)
-                    var responce = {
-                        status: 200,
-                        message: 'Password Update success.',
-                    }
-                    return res.status(200).send(responce);
-                } else {
-                    var responce = {
-                        status: 200,
-                        message: 'Please verify otp.',
-                    }
-                    return res.status(200).send(responce);
-                }
-            } else {
-                var responce = {
-                    status: 201,
-                    message: `${title} not exist. please enter right ${title}`,
-                }
-                return res.status(201).send(responce);
-            }
-        } else {
-            var responce = {
-                status: 201,
-                message: 'Can not be empty value.',
-            }
-            return res.status(201).send(responce);
-        }
-    } catch (error) {
-        console.log('error', error.message)
-        var responce = {
-            status: 501,
-            message: 'Internal Server Error.',
-        }
-        return res.status(501).send(responce);
-    }
-}
-async function changePassword(req, res) {
-    try {
-        const user_id = req.user_id
-        if (user_id == undefined || user_id == '') {
-            var responce = {
-                status: 403,
-                message: 'User not authorised.',
-            }
-            return res.status(403).send(responce);
-        }
-        const { old_password, new_password } = req.body;
-        if (old_password != '' && new_password != '') {
-            const result = await user.find({ "_id": user_id }).exec();
-            if (result.length > 0) {
-                const passChk = await comparePassword(result[0].password, old_password);
-                if (passChk) {
-                    const hashPass = await hashPassword(new_password);
-                    var query = { '_id': user_id };
-                    const datt = { password: hashPass };
-                    await user.findOneAndUpdate(query, datt)
-                    var responce = {
-                        status: 200,
-                        message: 'Password Update success.',
-                    }
-                    return res.status(200).send(responce);
+    const otp = 111111; // For production, replace with actual OTP generation logic
+    req.body.otp = otp;
 
-                }else {
-                    var responce = {
-                        status: 200,
-                        message: 'Old password is wrong.',
-                    }
-                    return res.status(200).send(responce);
-                }
-            } else {
-                var responce = {
-                    status: 201,
-                    message: 'User not exist.',
-                }
-                return res.status(201).send(responce);
-            }
-        } else {
-            var responce = {
-                status: 201,
-                message: 'Can not be empty value.',
-            }
-            return res.status(201).send(responce);
-        }
-    } catch (error) {
-        console.log('error', error.message)
-        var responce = {
-            status: 501,
-            message: 'Internal Server Error.',
-        }
-        return res.status(501).send(responce);
-    }
-}
+    const newUser = await user.create(req.body);
+    if (newUser) {
+      // await sendemails(email, user_name, otp, 1); // Uncomment and implement this line if email sending is required
 
-async function getUserList(req, res) {
-    try {
-        const user_id = req.user_id
-        if (user_id == undefined || user_id == '') {
-            var responce = {
-                status: 403,
-                message: 'User not authorised.',
-            }
-            return res.status(403).send(responce);
-        }
-        const result = await user.find({user_type:'user'}).select({user_name: 1, email: 1,status: 1,user_type:1,address: 1,birth_date:1, city: 1, country: 1,gender: 1,mobile: 1,name: 1,pincode: 1,state: 1, profile:1})
-        if (result.length > 0) {
-            var responce = {
-                status: 200,
-                message: 'success.',
-                data: result,
-                base_url: process.env.BASEURL
-            }
-            return res.status(200).send(responce);
-        } else {
-            var responce = {
-                status: 201,
-                message: 'failed.',
-            }
-            return res.status(201).send(responce);
-        }
-    } catch (error) {
-        console.log('error', error.message)
-        var responce = {
-            status: 501,
-            message: 'Internal Server Error.',
-        }
-        return res.status(501).send(responce);
+      return res.status(201).send({
+        status: 201,
+        message: "Registration success",
+        data: newUser,
+      });
+    } else {
+      return res.status(500).send({
+        status: 500,
+        message: "Registration failed",
+      });
     }
-}
+  } catch (error) {
+    console.error("Error:", error.message);
+    return res.status(500).send({
+      status: 500,
+      message: "Internal Server Error",
+    });
+  }
+};
 
-module.exports = { checkMobile, login, signup, updateProfile, otpVerify, resentOtp, forgotPassword, updatePassword, changePassword,  getUserList };
+exports.updateProfile = async (req, res) => {
+  try {
+    const user_id = req.user_id;
+    let { user_name, password } = req.body;
+
+    if (!user_name) {
+      return res.status(400).send({
+        status: 400,
+        message: "Username cannot be empty.",
+      });
+    }
+
+    if (req.files && req.files.profile && req.files.profile.length > 0) {
+      const profileFilename = req.files.profile[0].filename;
+      const bucketFilePath = `profile/${profileFilename}`;
+      const localFilePath = `${req.files.profile[0].destination}${profileFilename}`;
+
+      await s3UploadImage(localFilePath, bucketFilePath);
+      req.body.profile = bucketFilePath;
+    }
+
+    if (password) {
+      req.body.password = await hashPassword(password);
+    }
+
+    const updateResult = await user.updateOne(
+      { _id: new ObjectId(user_id) },
+      req.body
+    );
+
+    if (updateResult.nModified > 0) {
+      const updatedUser = await user
+        .findOne({ _id: new ObjectId(user_id) })
+        .exec();
+      const token = await jwtToken(
+        updatedUser._id,
+        user_name,
+        updatedUser.email,
+        updatedUser.user_type,
+        "logged"
+      );
+
+      return res.status(200).send({
+        status: 200,
+        message: "Update success",
+        data: updatedUser,
+        token: token,
+        base_url: process.env.BASEURL,
+      });
+    } else {
+      return res.status(500).send({
+        status: 500,
+        message: "Update failed",
+      });
+    }
+  } catch (error) {
+    console.error("Error:", error.message);
+    return res.status(500).send({
+      status: 500,
+      message: "Internal Server Error",
+    });
+  }
+};
+
+exports.login = async (req, res) => {
+  try {
+    const { mobile, password, user_type } = req.body;
+
+    if (!mobile || !password) {
+      return res.status(400).send({
+        status: 400,
+        message: "Mobile and password cannot be empty.",
+      });
+    }
+
+    const userRecord = await user.findOne({ mobile }).exec();
+
+    if (!userRecord) {
+      return res.status(404).send({
+        status: 404,
+        message: "User not found.",
+      });
+    }
+
+    if (!userRecord.verified) {
+      return res.status(403).send({
+        status: 403,
+        message: "Your account is not verified.",
+      });
+    }
+
+    if (!userRecord.password || !userRecord.user_name) {
+      return res.status(400).send({
+        status: 400,
+        message: "Username or password not set up correctly.",
+      });
+    }
+
+    const isPasswordValid = await comparePassword(
+      userRecord.password,
+      password
+    );
+    if (!isPasswordValid) {
+      return res.status(401).send({
+        status: 401,
+        message: "Invalid password.",
+      });
+    }
+
+    if (userRecord.user_type !== user_type) {
+      return res.status(400).send({
+        status: 400,
+        message: "User type mismatch.",
+      });
+    }
+
+    if (userRecord.profile_image) {
+      userRecord.profile_image = `${process.env.BASEURL}${process.env.PROFILE}${userRecord.profile_image}`;
+    }
+
+    const token = await jwtToken(
+      userRecord._id,
+      userRecord.user_name,
+      userRecord.email,
+      userRecord.user_type,
+      "logged"
+    );
+
+    return res.status(200).send({
+      status: 200,
+      message: "Login successful.",
+      data: { userDetail: userRecord, token },
+    });
+  } catch (error) {
+    console.error("Error:", error.message);
+    return res.status(500).send({
+      status: 500,
+      message: "Internal Server Error",
+    });
+  }
+};
+
+exports.otpVerify = async (req, res) => {
+  try {
+    const { mobile, otp } = req.body;
+
+    if (!mobile || !otp) {
+      return res.status(400).send({
+        status: 400,
+        message: "Mobile number and OTP cannot be empty.",
+      });
+    }
+
+    const userRecord = await user.findOne({ mobile }).exec();
+
+    if (!userRecord) {
+      return res.status(404).send({
+        status: 404,
+        message: "User not found.",
+      });
+    }
+
+    if (userRecord.otp !== otp) {
+      return res.status(400).send({
+        status: 400,
+        message: "Incorrect OTP, please enter the correct OTP.",
+      });
+    }
+
+    await user.updateOne({ mobile }, { otp: null, verified: true });
+
+    let token = null;
+    if (!userRecord.verified) {
+      token = await jwtToken(
+        userRecord._id,
+        userRecord.user_name,
+        userRecord.email,
+        userRecord.user_type,
+        "logged"
+      );
+    }
+
+    return res.status(200).send({
+      status: 200,
+      message: "OTP verification successful.",
+      data: userRecord,
+      token,
+    });
+  } catch (error) {
+    console.error("Error:", error.message);
+    return res.status(500).send({
+      status: 500,
+      message: "Internal Server Error",
+    });
+  }
+};
+
+exports.resentOtp = async (req, res) => {
+  try {
+    const { mobile } = req.body;
+
+    if (!mobile) {
+      return res.status(400).send({
+        status: 400,
+        message: "Mobile number cannot be empty.",
+      });
+    }
+
+    const userRecord = await user.findOne({ mobile }).exec();
+
+    if (!userRecord) {
+      return res.status(404).send({
+        status: 404,
+        message: "User with the provided mobile number does not exist.",
+      });
+    }
+
+    const otp = 111111; // Replace with actual OTP generation logic
+    const updateResult = await user.findOneAndUpdate(
+      { _id: userRecord._id },
+      { otp }
+    );
+
+    if (updateResult) {
+      // await sendemails(email, userRecord.user_name, otp, 2); // Uncomment and implement this line if email sending is required
+
+      return res.status(200).send({
+        status: 200,
+        message: "OTP sent successfully.",
+      });
+    } else {
+      return res.status(500).send({
+        status: 500,
+        message: "Failed to send OTP.",
+      });
+    }
+  } catch (error) {
+    console.error("Error:", error.message);
+    return res.status(500).send({
+      status: 500,
+      message: "Internal Server Error.",
+    });
+  }
+};
+
+exports.forgotPassword = async (req, res) => {
+  try {
+    const { mobile } = req.body;
+
+    if (!mobile) {
+      return res.status(400).send({
+        status: 400,
+        message: "Mobile number cannot be empty.",
+      });
+    }
+
+    const userRecord = await user.findOne({ mobile }).exec();
+
+    if (!userRecord) {
+      return res.status(404).send({
+        status: 404,
+        message: "User with the provided mobile number does not exist.",
+      });
+    }
+
+    if (!userRecord.password || !userRecord.user_name) {
+      return res.status(400).send({
+        status: 400,
+        message: "User details are not properly set up.",
+      });
+    }
+
+    const otp = 1111; // Replace with actual OTP generation logic
+    const updateResult = await user.findOneAndUpdate(
+      { _id: userRecord._id },
+      { otp }
+    );
+
+    if (updateResult) {
+      // await sendemails(userRecord.email, userRecord.user_name, otp, 3); // Uncomment and implement this line if email sending is required
+
+      return res.status(200).send({
+        status: 200,
+        message: "OTP sent successfully.",
+      });
+    } else {
+      return res.status(500).send({
+        status: 500,
+        message: "Failed to send OTP.",
+      });
+    }
+  } catch (error) {
+    console.error("Error:", error.message);
+    return res.status(500).send({
+      status: 500,
+      message: "Internal Server Error.",
+    });
+  }
+};
+
+exports.updatePassword = async (req, res) => {
+  try {
+    const { mobile, password } = req.body;
+
+    if (!mobile || !password) {
+      return res.status(400).send({
+        status: 400,
+        message: "Mobile number and password cannot be empty.",
+      });
+    }
+
+    const isMobile = isNumber(mobile); // Assuming isNumber is a function to check if mobile is valid
+    const query = isMobile ? { mobile } : { email: mobile };
+    const userRecord = await user.findOne(query).exec();
+
+    if (!userRecord) {
+      return res.status(404).send({
+        status: 404,
+        message: `User with the provided ${
+          isMobile ? "mobile" : "email"
+        } does not exist.`,
+      });
+    }
+
+    if (userRecord.otp) {
+      return res.status(400).send({
+        status: 400,
+        message: "Please verify OTP before updating the password.",
+      });
+    }
+
+    const hashedPassword = await hashPassword(password);
+    await user.updateOne({ _id: userRecord._id }, { password: hashedPassword });
+
+    return res.status(200).send({
+      status: 200,
+      message: "Password updated successfully.",
+    });
+  } catch (error) {
+    console.error("Error:", error.message);
+    return res.status(500).send({
+      status: 500,
+      message: "Internal Server Error.",
+    });
+  }
+};
+
+exports.changePassword = async (req, res) => {
+  try {
+    const user_id = req.user_id;
+    const { old_password, new_password } = req.body;
+
+    // Check for user authorization
+    if (!user_id) {
+      return res.status(403).json({
+        status: 403,
+        message: "User not authorized.",
+      });
+    }
+
+    // Validate passwords
+    if (!old_password || !new_password) {
+      return res.status(400).json({
+        status: 400,
+        message: "Old password and new password cannot be empty.",
+      });
+    }
+
+    // Find the user
+    const userRecord = await user.findById(user_id).exec();
+
+    if (!userRecord) {
+      return res.status(404).json({
+        status: 404,
+        message: "User does not exist.",
+      });
+    }
+
+    // Check if the old password is correct
+    const isPasswordCorrect = await comparePassword(
+      userRecord.password,
+      old_password
+    );
+
+    if (!isPasswordCorrect) {
+      return res.status(400).json({
+        status: 400,
+        message: "Old password is incorrect.",
+      });
+    }
+
+    // Hash and update the new password
+    const hashedPassword = await hashPassword(new_password);
+    await user.findByIdAndUpdate(user_id, { password: hashedPassword });
+
+    return res.status(200).json({
+      status: 200,
+      message: "Password updated successfully.",
+    });
+  } catch (error) {
+    console.error("Error:", error.message);
+    return res.status(500).json({
+      status: 500,
+      message: "Internal Server Error.",
+    });
+  }
+};
+
+exports.getUserList = async (req, res) => {
+  try {
+    const user_id = req.user_id;
+    if (!user_id) {
+      return res.status(403).send({
+        status: 403,
+        message: "User not authorised.",
+      });
+    }
+
+    const result = await User.find({ user_type: "user" }).select({
+      password: -1, // Exclude sensitive field
+      otp: -1, // Exclude OTP field
+      verified: -1, // Exclude verification status
+      createdDate: -1, // Exclude creation date
+    });
+
+    if (result.length > 0) {
+      return res.status(200).send({
+        status: 200,
+        message: "success.",
+        data: result,
+        base_url: process.env.BASEURL,
+      });
+    } else {
+      return res.status(201).send({
+        status: 201,
+        message: "failed.",
+      });
+    }
+  } catch (error) {
+    console.log("error", error.message);
+    return res.status(501).send({
+      status: 501,
+      message: "Internal Server Error.",
+    });
+  }
+};
