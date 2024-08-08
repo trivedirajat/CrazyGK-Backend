@@ -1,10 +1,16 @@
 const mongoose = require('mongoose');
 
-const dburl = "mongodb+srv://digitalappdb:n44sBufbQlSut04W@cluster0.a4a10pu.mongodb.net/CrazyGkTricksDB"
-
-const DBConnect = () =>{
-
-    mongoose.connect("mongodb+srv://digitalappdb:n44sBufbQlSut04W@cluster0.a4a10pu.mongodb.net/CrazyGkTricksDB")
-      .then(() => console.log('Database Connected!')).catch(error => console.log('error', error));
+const dburl = process.env.MONGOOSE_URL
+console.log('MongoDB URI:', dburl);
+const DBConnect = async() =>{
+  try {
+    await mongoose.connect(dburl, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
+    console.log("Connected to MongoDB");
+  } catch (error) {
+    console.error("Connection to MongoDB failed:", error);
+  }
 }
 module.exports = DBConnect;
