@@ -1,3 +1,4 @@
+require('dotenv').config();
 var createError = require('http-errors');
 var express = require('express');
 var path = require('path');
@@ -9,26 +10,26 @@ var DBConnect = require('./src/config/database')
 var bodyParser = require('body-parser')
 var helmet = require("helmet");
 var cors = require('cors')
-var dotenv = require("dotenv");
+
 var https = require("https")
 var fs = require("fs");
 const Razorpay = require('razorpay');
-dotenv.config();
+
 var app = express();
 
 // view engine setup
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'jade');
 
-var instance = new Razorpay({
-  key_id: 'YOUR_KEY_ID',
-  key_secret: 'YOUR_KEY_SECRET',
-});
+// var instance = new Razorpay({
+//   key_id: 'YOUR_KEY_ID',
+//   key_secret: 'YOUR_KEY_SECRET',
+// });
 
-const options = {
-   key: fs.readFileSync('/etc/letsencrypt/live/crazygkaws.zetawiztechnologies.com/privkey.pem'),
-   cert: fs.readFileSync('/etc/letsencrypt/live/crazygkaws.zetawiztechnologies.com/fullchain.pem')
- }
+// const options = {
+//    key: fs.readFileSync('/etc/letsencrypt/live/crazygkaws.zetawiztechnologies.com/privkey.pem'),
+//    cert: fs.readFileSync('/etc/letsencrypt/live/crazygkaws.zetawiztechnologies.com/fullchain.pem')
+//  }
 
 app.use(helmet());
 app.use(cors())
@@ -73,10 +74,10 @@ app.use(function (err, req, res, next) {
 
 });
 
-// app.listen(3005, () => {
-//  console.log(`Example app listening on port ${3005}`)
-// })
+app.listen(3005, () => {
+ console.log(`Example app listening on port ${3005}`)
+})
 
- https.createServer(options, app).listen(3005, console.log(`server runs on port ${3000}`))
+//  https.createServer(options, app).listen(3005, console.log(`server runs on port ${3000}`))
 
 module.exports = app;
