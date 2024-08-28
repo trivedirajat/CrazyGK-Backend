@@ -1,0 +1,32 @@
+const mongoose = require('mongoose');
+const dataScema = new mongoose.Schema({
+  name: {
+    type: String,
+  },
+  description: {
+    type: String,
+  },
+  questionList: {
+    type: [mongoose.Schema.Types.ObjectId],
+  },
+  totalMarks: {
+    type: number,
+  },
+  passingMarks: {
+    type: number,
+  },
+  negativeMarks: {
+    type: number,
+  },
+  isPublished: {
+    type: Boolean,
+    default: false,
+  },
+  createdDate: {
+    type: Date,
+    default: Date.now,
+    required: true,
+  },
+});
+
+module.exports = mongoose.model('quiz', dataScema);
