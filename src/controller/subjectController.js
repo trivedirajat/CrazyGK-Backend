@@ -20,6 +20,7 @@ async function addSubjects(req, res) {
                 bucketFilePath= 'subject/'+req.files.image[0].filename;
                 const localFilePath = req.files.image[0].destination+req.files.image[0].filename;
                 const imageUpload = await s3UploadImage(localFilePath, bucketFilePath)
+                console.log("🚀 ~ addSubjects ~ imageUpload:", imageUpload)
                 req.body.image = bucketFilePath
             }
 
