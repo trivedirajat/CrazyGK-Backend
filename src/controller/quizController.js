@@ -2,8 +2,9 @@ var quizModel = require('../models/quiz');
 
 async function addQuiz(req, res) {
   try {
-    const user_id = req.user_id;
-    if (user_id != undefined || user_id != '') {
+    const user_id = req?.user_id || req?.user?.user_id
+    console.log("user_id",user_id)
+    if (!user_id) {
       var responce = {
         status: 403,
         message: 'User not authorised.',

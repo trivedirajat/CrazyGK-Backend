@@ -3,7 +3,7 @@ var router = express.Router();
 
 var { addQuiz } = require('../controller/quizController');
 
-router.post('/addQuery', addQuiz);
+router.post('/addQuiz', addQuiz);
 // router.get('/getPlan', getPlan);
 
 module.exports = router;

@@ -12,7 +12,8 @@ async function verifyToken(req, res, next) {
         next();
     }
 
-    const tokens = jwt.verify(token, 'CRAZYGKTRICKSAPI', function (err, decoded) {
+    jwt.verify(token, process.env.JWTKEY, function (err, decoded) {
+        console.log("decoded",decoded)
         if (decoded) {
             if (decoded.type === 'logged') {
 

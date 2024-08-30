@@ -10,13 +10,13 @@ const dataScema = new mongoose.Schema({
     type: [mongoose.Schema.Types.ObjectId],
   },
   totalMarks: {
-    type: number,
+    type: Number,
   },
   passingMarks: {
-    type: number,
+    type: Number,
   },
   negativeMarks: {
-    type: number,
+    type: Number,
   },
   isPublished: {
     type: Boolean,

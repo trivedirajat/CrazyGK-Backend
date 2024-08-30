@@ -16,6 +16,7 @@ var reviewRoutes = require('./reviewRoute')
 var whatsNewRoutes = require('./whatsNewRoute')
 var jobRoutes = require('./jobRoute')
 var dalyVocabRoutes = require('./dalyVocabRoute')
+var quizRoutes = require('./quizRoute')
 /* GET home page. */
 
 router.use('/token', tokenRoutes);
@@ -32,5 +33,6 @@ router.use('/review', verifyToken, reviewRoutes);
 router.use('/whatsNew', verifyToken, whatsNewRoutes);
 router.use('/job', verifyToken, jobRoutes);
 router.use('/dalyVocab', verifyToken, dalyVocabRoutes);
+router.use('/quiz',verifyToken,quizRoutes)
 
 module.exports = router;
