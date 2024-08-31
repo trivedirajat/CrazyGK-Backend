@@ -37,6 +37,7 @@ async function editQuestion(req, res) {
     answers,
     marks,
   });
+    console.log("")
 }
 
 module.exports = { addQuestion, editQuestion };

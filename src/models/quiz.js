@@ -1,4 +1,6 @@
 const mongoose = require('mongoose');
+const questions = require('./questions');
+const subjects = require('./subjects');
 const dataScema = new mongoose.Schema({
   name: {
     type: String,
@@ -8,6 +10,11 @@ const dataScema = new mongoose.Schema({
   },
   questionList: {
     type: [mongoose.Schema.Types.ObjectId],
+    ref: questions,
+  },
+  subject: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: subjects,
   },
   totalMarks: {
     type: Number,
