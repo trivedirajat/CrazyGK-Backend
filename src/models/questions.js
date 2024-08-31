@@ -1,23 +1,33 @@
 const mongoose = require('mongoose');
 const dataScema = new mongoose.Schema({
-  questions: {
+  question: {
     type: String,
   },
-  options: {
-    type: [String],
+  questionType: {
+    type: String,
+    enum: [
+      'Single Choice',
+      'Multiple Choice',
+      'True/False',
+      'Fill in the Blank',
+    ],
+    default: 'Multiple Choice',
   },
-  answers: {
-    type: int,
-  },
+  options: [
+    {
+      value: String,
+      isCorrect: Boolean,
+    },
+  ],
   marks: {
-    type: number,
+    type: Number,
   },
   time: {
-    type: number,
+    type: Number,
   },
   isPublished: {
     type: Boolean,
-    default: false,
+    default: true,
   },
   createdDate: {
     type: Date,
@@ -26,4 +36,4 @@ const dataScema = new mongoose.Schema({
   },
 });
 
-module.exports = mongoose.model('query', dataScema);
+module.exports = mongoose.model('questions', dataScema);
