@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 const dataScema = new mongoose.Schema({
   question: {
     type: String,
@@ -6,12 +6,12 @@ const dataScema = new mongoose.Schema({
   questionType: {
     type: String,
     enum: [
-      'Single Choice',
-      'Multiple Choice',
-      'True/False',
-      'Fill in the Blank',
+      "Single Choice",
+      "Multiple Choice",
+      "True/False",
+      "Fill in the Blank",
     ],
-    default: 'Multiple Choice',
+    default: "Multiple Choice",
   },
   options: [
     {
@@ -29,6 +29,11 @@ const dataScema = new mongoose.Schema({
     type: Boolean,
     default: true,
   },
+  subject: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "subjects",
+    required: true,
+  },
   createdDate: {
     type: Date,
     default: Date.now,
@@ -36,4 +41,4 @@ const dataScema = new mongoose.Schema({
   },
 });
 
-module.exports = mongoose.model('questions', dataScema);
+module.exports = mongoose.model("questions", dataScema);

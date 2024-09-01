@@ -1,13 +1,9 @@
-var questionModel = require('../models/questions');
-const mongoose = require('mongoose');
+var questionModel = require("../models/questions");
+const mongoose = require("mongoose");
 async function addQuestion(req, res) {
   try {
-    const { question, options, marks } = req.body;
-    const questionResponse = await questionModel.create({
-      question,
-      options,
-      marks,
-    });
+    const { questions } = req.body;
+    const questionResponse = await questionModel.insertMany(questions);
     if (questionResponse) {
       return res.status(200).send({
         status: 200,
@@ -17,13 +13,13 @@ async function addQuestion(req, res) {
     } else {
       return res.status(400).send({
         status: 400,
-        message: 'Failed to add Questions.',
+        message: "Failed to add Questions.",
       });
     }
   } catch (error) {
     var responce = {
       status: 501,
-      message: 'Internal Server Error',
+      message: "Internal Server Error",
     };
     return res.status(501).send(responce);
   }
@@ -33,14 +29,9 @@ async function getAllQuestion(req, res) {
   try {
     let { id } = req.params;
     if (id) {
-      console.log(
-        'new mongoose.Types.ObjectId(id),',
-        new mongoose.Types.ObjectId(id)
-      );
       const questionResponse = await questionModel.findOne({
         _id: new mongoose.Types.ObjectId(id),
       });
-      console.log('questionResponse', questionResponse);
       if (questionResponse) {
         return res.status(200).send({
           status: 200,
@@ -50,7 +41,7 @@ async function getAllQuestion(req, res) {
       }
       return res.status(400).send({
         status: 400,
-        message: 'Failed to fetch Questions.',
+        message: "Failed to fetch Questions.",
       });
     }
     let { page, limit } = req.query;
@@ -62,6 +53,11 @@ async function getAllQuestion(req, res) {
     }
     const questionResponse = await questionModel
       .find()
+      .populate({
+        path: "subject",
+        model: "subjects",
+        select: "subject_name",
+      })
       .limit(limit)
       .skip(limit * page);
     const questionCount = await questionModel.count();
@@ -75,29 +71,64 @@ async function getAllQuestion(req, res) {
     } else {
       return res.status(400).send({
         status: 400,
-        message: 'Failed to fetch Questions.',
+        message: "Failed to fetch Questions.",
       });
     }
   } catch (error) {
-    console.log('Error', error);
+    console.log("Error", error);
     var responce = {
       status: 501,
-      message: 'Internal Server Error',
+      message: "Internal Server Error",
     };
     return res.status(501).send(responce);
   }
 }
-
-async function editQuestion(req, res) {
+async function getQuestionsListbySubjectid(req, res) {
   try {
-    const questionResponse = await questionModel.findOne({
-      _id: new ObjectId(id),
-    });
-    const { question, options, marks } = req.body;
-    console.log('questionResponse', questionResponse);
+    let { subjectId } = req.params;
+    const questionResponse = await questionModel
+      .find({
+        subject: new mongoose.Types.ObjectId(subjectId),
+        isPublished: true,
+      })
+      .populate({
+        path: "subject",
+        model: "subjects",
+        select: "subject_name",
+      });
+    if (questionResponse) {
+      return res.status(200).send({
+        status: 200,
+        message: `Questions fetched Successfully.`,
+        data: questionResponse,
+      });
+    } else {
+      return res.status(400).send({
+        status: 400,
+        message: "Failed to fetch Questions.",
+      });
+    }
+  } catch (error) {
+    console.log("Error", error);
+    const responce = {
+      status: 501,
+      message: "Internal Server Error",
+    };
+    return res.status(501).send(responce);
+  }
+}
+async function editQuestion(req, res) {
+  let { id } = req.params;
+  try {
+    const questionResponse = await questionModel.findById(id);
+    const { question, options, marks, isPublished, time, subject } = req.body;
+    console.log("questionResponse", questionResponse);
     questionResponse.question = question;
     questionResponse.options = options;
     questionResponse.marks = marks;
+    questionResponse.isPublished = isPublished;
+    questionResponse.time = time;
+    questionResponse.subject = new mongoose.Types.ObjectId(subject);
     const updatedQuestionsResponse = await questionResponse.save();
     if (updatedQuestionsResponse) {
       return res.status(200).send({
@@ -108,23 +139,24 @@ async function editQuestion(req, res) {
     } else {
       return res.status(400).send({
         status: 400,
-        message: 'Failed to update Questions.',
+        message: "Failed to update Questions.",
       });
     }
   } catch (error) {
+    console.log("🚀 ~ editQuestion ~ error:", error);
     var responce = {
       status: 501,
-      message: 'Internal Server Error',
+      message: "Internal Server Error",
     };
     return res.status(501).send(responce);
   }
 }
 
 async function deleteQuestion(req, res) {
+  const { id } = req.params;
   try {
-    const questionResponse = await questionModel.deleteOne();
-    console.log('questionResponse', questionResponse);
-    if (questionResponse?.deletedCount > 0) {
+    const questionResponse = await questionModel.findByIdAndDelete(id);
+    if (questionResponse) {
       return res.status(200).send({
         status: 200,
         message: `Questions deleted Successfully.`,
@@ -133,16 +165,22 @@ async function deleteQuestion(req, res) {
     } else {
       return res.status(400).send({
         status: 400,
-        message: 'Failed to delete Questions.',
+        message: "Failed to delete Questions.",
       });
     }
   } catch (error) {
     var responce = {
       status: 501,
-      message: 'Internal Server Error',
+      message: "Internal Server Error",
     };
     return res.status(501).send(responce);
   }
 }
 
-module.exports = { addQuestion, editQuestion, deleteQuestion, getAllQuestion };
+module.exports = {
+  addQuestion,
+  editQuestion,
+  deleteQuestion,
+  getAllQuestion,
+  getQuestionsListbySubjectid,
+};
