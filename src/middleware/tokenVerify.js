@@ -12,7 +12,8 @@ async function verifyToken(req, res, next) {
         next();
     }
 
-    const tokens = jwt.verify(token, 'CRAZYGKTRICKSAPI', function (err, decoded) {
+    jwt.verify(token, process.env.JWTKEY, function (err, decoded) {
+        console.log("decoded",decoded)
         if (decoded) {
             if (decoded.type === 'logged') {
 
@@ -36,4 +37,16 @@ async function verifyToken(req, res, next) {
     });
 }
 
-module.exports = { verifyToken };
+async function verifyRole(req, res, next) {
+  const user_id = req?.user_id || req?.user?.user_id;
+  if (!user_id) {
+    var responseErr = {
+      status: 403,
+      message: 'Unauthorized access.',
+    };
+    return res.status(403).send(responseErr);
+  }
+  next();
+}
+
+module.exports = { verifyToken, verifyRole };

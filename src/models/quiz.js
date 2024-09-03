@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 const dataScema = new mongoose.Schema({
   name: {
     type: String,
@@ -8,15 +8,20 @@ const dataScema = new mongoose.Schema({
   },
   questionList: {
     type: [mongoose.Schema.Types.ObjectId],
+    ref: "questions",
+  },
+  subject: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "subjects",
   },
   totalMarks: {
-    type: number,
+    type: Number,
   },
   passingMarks: {
-    type: number,
+    type: Number,
   },
   negativeMarks: {
-    type: number,
+    type: Number,
   },
   isPublished: {
     type: Boolean,
@@ -29,4 +34,4 @@ const dataScema = new mongoose.Schema({
   },
 });
 
-module.exports = mongoose.model('quiz', dataScema);
+module.exports = mongoose.model("quiz", dataScema);
