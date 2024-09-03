@@ -13,12 +13,20 @@ async function addQuiz(req, res) {
     //   return res.status(403).send(responce);
     // }
 
-    const { name, description, questionList, totalMarks, subject } = req.body;
+    const {
+      name,
+      description,
+      questionList,
+      totalMarks,
+      subject,
+      isPublished,
+    } = req.body;
     const quizResponse = await quizModel.create({
       name,
       description,
       questionList,
       totalMarks,
+      isPublished,
       subject: new mongoose.Types.ObjectId(subject),
     });
     if (quizResponse) {
