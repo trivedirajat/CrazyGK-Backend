@@ -1,6 +1,5 @@
 const mongoose = require("mongoose");
 const dataScema = new mongoose.Schema({
-  
   title: {
     type: String,
   },
@@ -10,9 +9,9 @@ const dataScema = new mongoose.Schema({
   description: {
     type: String,
   },
-  status: {
-    type: Boolean,
-    default: true,
+  job_link: {
+    type: String,
+    required: true,
   },
   createdDate: {
     type: Date,
