@@ -1,24 +1,42 @@
-var express = require('express');
+var express = require("express");
 var router = express.Router();
 
-var {addReview, getReview, reviewDelete} = require('../controller/reviewController');
+var {
+  addReview,
+  getReviews,
+  reviewDelete,
+  createReview,
+  getReviewbyId,
+  updateReview,
+} = require("../controller/reviewController");
 
-const multer = require('multer');
+const multer = require("multer");
 const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        cb(null, "public/assets/blog/");
-    },
-  
-    filename: function (req, file, cb) {
-        const ext = file.originalname.split('.').pop();
-        const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-        cb(null, "profile-" + uniqueSuffix + '.' + ext);
-    },
-  });
-  const upload = multer({ storage: storage });
+  destination: function (req, file, cb) {
+    cb(null, "public/assets/review");
+  },
 
-router.post('/addReview', upload.fields([{ name: "user_profile" }]), addReview);
-router.post('/getReview', getReview);
-router.post('/reviewDelete', reviewDelete);
+  filename: function (req, file, cb) {
+    const ext = file.originalname.split(".").pop();
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(null, "profile-" + uniqueSuffix + "." + ext);
+  },
+});
+const upload = multer({ storage: storage });
+
+router.post(
+  "/addReview",
+  upload.fields([{ name: "user_profile" }]),
+  createReview
+);
+// router.post("/addReview", upload.fields([{ name: "user_profile" }]), addReview);
+router.get("/getReviews", getReviews);
+router.get("/getreviewbyid", getReviewbyId);
+router.put(
+  "/editReview/:id",
+  upload.fields([{ name: "user_profile" }]),
+  updateReview
+);
+router.delete("/reviewDelete/:id", reviewDelete);
 
 module.exports = router;

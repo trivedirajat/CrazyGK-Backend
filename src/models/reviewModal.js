@@ -5,12 +5,17 @@ const dataScema = new mongoose.Schema({
   },
   review: {
     type: String,
-  },  
+  },
   rating: {
-    type: String,
+    type: Number,
+    required: true,
+    min: 1,
+    max: 5,
+    default: 1,
   },
   user_profile: {
     type: String,
+    default: "",
   },
   name: {
     type: String,
