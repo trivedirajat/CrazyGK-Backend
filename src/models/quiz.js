@@ -27,6 +27,10 @@ const dataScema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  isFeatured: {
+    type: Boolean,
+    default: false,
+  },
   createdDate: {
     type: Date,
     default: Date.now,

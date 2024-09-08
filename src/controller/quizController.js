@@ -20,6 +20,7 @@ async function addQuiz(req, res) {
       totalMarks,
       subject,
       isPublished,
+      isFeatured,
     } = req.body;
     const quizResponse = await quizModel.create({
       name,
@@ -28,6 +29,7 @@ async function addQuiz(req, res) {
       totalMarks,
       isPublished,
       subject: new mongoose.Types.ObjectId(subject),
+      isFeatured,
     });
     if (quizResponse) {
       return res.status(200).send({
@@ -169,6 +171,34 @@ async function getQuizBySubjectId(req, res) {
     return res.status(501).send(responce);
   }
 }
+async function getQuizByFeatured(req, res) {
+  try {
+    const quizResponse = await quizModel
+      .find({ isFeatured: true, isPublished: true })
+      .populate({
+        path: "subject",
+        model: "subjects",
+        select: "subject_name",
+      });
+    if (quizResponse) {
+      return res.status(200).send({
+        status: 200,
+        message: `Quiz fetched Successfully.`,
+        data: quizResponse,
+      });
+    }
+    return res.status(400).send({
+      status: 400,
+      message: "Failed to fetch quiz.",
+    });
+  } catch (error) {
+    const responce = {
+      status: 501,
+      message: "Internal Server Error",
+    };
+    return res.status(501).send(responce);
+  }
+}
 async function startQuiz(req, res) {
   try {
     const quizResponse = await quizModel
@@ -222,6 +252,7 @@ async function UpdateQuiz(req, res) {
       totalMarks,
       subject,
       isPublished,
+      isFeatured,
     } = req.body;
     const quizResponse = await quizModel.findByIdAndUpdate(
       req.params.id,
@@ -231,6 +262,7 @@ async function UpdateQuiz(req, res) {
         questionList,
         totalMarks,
         isPublished,
+        isFeatured,
         subject: new mongoose.Types.ObjectId(subject),
       },
       { new: true }
@@ -285,5 +317,6 @@ module.exports = {
   deleteQuiz,
   getQuizWithSubject,
   getQuizBySubjectId,
+  getQuizByFeatured,
   startQuiz,
 };
