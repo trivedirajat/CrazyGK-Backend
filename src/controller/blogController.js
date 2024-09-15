@@ -1,93 +1,73 @@
 var subjects = require("../models/subjects");
 const blogModal = require("../models/blogModal");
 var { ObjectId } = require("mongodb");
-const { s3UploadImage } = require("../helper/helper");
+const { s3UploadImage, uploadAndSaveImage } = require("../helper/helper");
 
 async function addBlog(req, res) {
   try {
-    // const user_id = req.user_id
-    // if(user_id === undefined || user_id === ''){
-    //     var responce = {
-    //         status: 403,
-    //         message: 'User not authorised.',
-    //     }
-    //     return res.status(403).send(responce);
-    // }
-    const { blog_id, title, decription } = req.body;
-    if (title != "") {
-      if (
-        req.files &&
-        typeof req.files.image != undefined &&
-        req.files.image != null
-      ) {
-        req.body.image = req.files.image[0].filename;
-        bucketFilePath = "blog/" + req.files.image[0].filename;
-        const localFilePath =
-          req.files.image[0].destination + req.files.image[0].filename;
-        const imageUpload = await s3UploadImage(localFilePath, bucketFilePath);
-        req.body.image = bucketFilePath;
-      }
-      if (blog_id != undefined && blog_id != "") {
-        var result = await blogModal.updateOne(
-          { _id: new ObjectId(blog_id) },
-          req.body
-        );
-        var msg = "Update ";
-        var results = await blogModal.find({ _id: new ObjectId(blog_id) });
-        if (result) {
-          result = results != undefined ? results : result;
+    const { blog_id, title } = req.body;
 
-          var response = {
-            status: 200,
-            message: `${msg} Successfully`,
-            data: result,
-            base_url: process.env.BASEURL,
-          };
-          return res.status(200).send(response);
-        } else {
-          var response = {
-            status: 201,
-            message: `${msg} Failed.`,
-          };
-          return res.status(201).send(response);
-        }
-      } else {
-        var result = await blogModal.create(req.body);
-        var msg = "Add ";
-        if (result) {
-          result = results != undefined ? results : result;
+    if (!title || title.trim() === "") {
+      return res
+        .status(400)
+        .json({ status: 400, message: "Title cannot be empty." });
+    }
 
-          var response = {
-            status: 200,
-            message: `${msg} Successfully`,
-            data: result,
-            base_url: process.env.BASEURL,
-          };
-          return res.status(200).send(response);
-        } else {
-          var response = {
-            status: 201,
-            message: `${msg} Failed.`,
-          };
-          return res.status(201).send(response);
-        }
+    let imageUrl = null;
+
+    // Handle image upload
+    if (req.files && req.files.image) {
+      const uploadResult = await uploadAndSaveImage(
+        req,
+        "image",
+        "public/assets/blogs"
+      );
+      if (!uploadResult.success) {
+        return res
+          .status(500)
+          .json({ status: 500, message: uploadResult.message });
       }
+      imageUrl = uploadResult.imageUrl;
+      req.body.image = imageUrl;
+    }
+
+    let msg;
+    let result;
+
+    // Update existing blog
+    if (blog_id) {
+      result = await blogModal.updateOne(
+        { _id: new ObjectId(blog_id) },
+        req.body
+      );
+      msg = "Update";
     } else {
-      var response = {
-        status: 201,
-        message: "Can not be empty value.",
-      };
-      return res.status(201).send(response);
+      // Create new blog
+      result = await blogModal.create(req.body);
+      msg = "Add";
+    }
+
+    // Check if operation succeeded
+    if (result) {
+      return res.status(200).json({
+        status: 200,
+        message: `${msg} Successfully`,
+        data: result,
+        imageUrl,
+        base_url: process.env.BASEURL,
+      });
+    } else {
+      return res.status(500).json({ status: 500, message: `${msg} Failed.` });
     }
   } catch (error) {
     console.log("error", error.message);
-    var responce = {
-      status: 501,
+    return res.status(500).json({
+      status: 500,
       message: "Internal Server Error",
-    };
-    return res.status(501).send(responce);
+    });
   }
 }
+
 async function getBlogs(req, res) {
   try {
     // const user_id = req.user_id

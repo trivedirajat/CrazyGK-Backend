@@ -1,4 +1,4 @@
-const { s3UploadImage } = require("../helper/helper");
+const { s3UploadImage, uploadAndSaveImage } = require("../helper/helper");
 const path = require("path");
 const fs = require("fs");
 const reviewModal = require("../models/reviewModal");
@@ -6,15 +6,6 @@ var { ObjectId } = require("mongodb");
 
 async function addReview(req, res) {
   try {
-    // const user_id = req.user_id
-    // if(user_id != undefined || user_id != ''){
-    //     var responce = {
-    //         status: 403,
-    //         message: 'User not authorised.',
-    //     }
-    //     return res.status(403).send(responce);
-    // }
-
     const { review, rating, review_id } = req.body;
     if (review != "" || rating != "") {
       if (
@@ -90,41 +81,29 @@ async function addReview(req, res) {
 const createReview = async (req, res) => {
   try {
     const { name, review, rating } = req.body;
-    let imagePath = null;
+    let imageUrl = null;
 
     // Check if there's an image to upload
     if (req.files && req.files.user_profile) {
-      const localFilePath = path.join(
-        "public/assets/review",
-        req.files.user_profile[0].filename
+      const uploadResult = await uploadAndSaveImage(
+        req,
+        "user_profile",
+        "public/assets/reviews"
       );
-      console.log("🚀 ~ createReview ~ localFilePath:", localFilePath);
-      const bucketFilePath = `reviews/${req.files.user_profile[0].filename}`;
-
-      try {
-        // Upload to S3
-        imagePath = await s3UploadImage(localFilePath, bucketFilePath);
-        console.log("🚀 ~ createReview ~ imagePath:", imagePath);
-
-        // If upload is successful, delete the local file
-        fs.unlinkSync(localFilePath);
-      } catch (s3Error) {
-        // On S3 upload failure, still delete the local file
-        fs.unlinkSync(localFilePath);
-        return res.status(500).json({
-          message: "Error uploading image to S3",
-          error: s3Error.message,
-          status: 500,
-        });
+      if (!uploadResult.success) {
+        return res
+          .status(500)
+          .json({ status: 500, message: uploadResult.message });
       }
+      imageUrl = uploadResult.imageUrl;
+      req.body.image = imageUrl;
     }
 
-    // Create new review with S3 image path
     const newReview = new reviewModal({
       name,
       review,
       rating,
-      user_profile: imagePath,
+      user_profile: imageUrl,
     });
 
     await newReview.save();
@@ -138,75 +117,7 @@ const createReview = async (req, res) => {
       .json({ message: "Error creating review", error: err.message });
   }
 };
-// async function getReview(req, res) {
-//   try {
-//     // const user_id = req.user_id
-//     // if(user_id != undefined || user_id != ''){
-//     //     var responce = {
-//     //         status: 403,
-//     //         message: 'User not authorised.',
-//     //     }
-//     //     return res.status(403).send(responce);
-//     // }
-//     const { limit = 30, offset = 0, review_id } = req.body;
-//     const page = Math.max(0, Number(offset));
 
-//     // const result = await reviewModal.find().skip(Number(limit) * page).limit(Number(limit)).sort({ '_id': -1 }).exec();
-//     const result = await reviewModal
-//       .aggregate([
-//         {
-//           $lookup: {
-//             from: "users",
-//             localField: "user_id",
-//             foreignField: "_id",
-//             as: "users",
-//           },
-//         },
-//         { $unwind: "$users" },
-//         {
-//           $project: {
-//             _id: 1,
-//             review: 1,
-//             rating: 1,
-//             createdDate: 1,
-//             createdDate: 1,
-//             user_id: 1,
-//             name: 1,
-//             user_profile: 1,
-//             user_name: "$users.name",
-//             profile: "$users.profile",
-//           },
-//         },
-//       ])
-//       .skip(Number(limit) * page)
-//       .limit(Number(limit))
-//       .sort({ _id: -1 })
-//       .exec();
-
-//     if (result.length > 0) {
-//       var response = {
-//         status: 200,
-//         message: "Success.",
-//         data: result,
-//         base_url: process.env.BASEURL,
-//       };
-//       return res.status(200).send(response);
-//     } else {
-//       var response = {
-//         status: 201,
-//         message: "Failed.",
-//       };
-//       return res.status(201).send(response);
-//     }
-//   } catch (error) {
-//     console.log("error", error.message);
-//     var responce = {
-//       status: 501,
-//       message: "Internal Server Error",
-//     };
-//     return res.status(501).send(responce);
-//   }
-// }
 const getReviews = async (req, res) => {
   const { page = 1, limit = 10 } = req.query;
 
@@ -260,59 +171,58 @@ const getReviewbyId = async (req, res) => {
 const updateReview = async (req, res) => {
   const { name, review, rating } = req.body;
   const { id } = req.params;
+
   try {
+    let imageUrl = null;
+
     if (req.files && req.files.user_profile) {
-      const localFilePath = path.join(
-        "public/assets/review",
-        req.files.user_profile[0].filename
+      const uploadResult = await uploadAndSaveImage(
+        req,
+        "user_profile",
+        "public/assets/reviews"
       );
-      console.log("🚀 ~ createReview ~ localFilePath:", localFilePath);
-      const bucketFilePath = `reviews/${req.files.user_profile[0].filename}`;
-
-      try {
-        // Upload to S3
-        imagePath = await s3UploadImage(localFilePath, bucketFilePath);
-        console.log("🚀 ~ createReview ~ imagePath:", imagePath);
-
-        // If upload is successful, delete the local file
-        fs.unlinkSync(localFilePath);
-      } catch (s3Error) {
-        // On S3 upload failure, still delete the local file
-        fs.unlinkSync(localFilePath);
-        return res.status(500).json({
-          message: "Error uploading image to S3",
-          error: s3Error.message,
-        });
+      if (!uploadResult.success) {
+        return res
+          .status(500)
+          .json({ status: 500, message: uploadResult.message });
       }
+      imageUrl = uploadResult.imageUrl;
+      req.body.image = imageUrl;
     }
-    const newreview = await reviewModal.findByIdAndUpdate(id, {
-      name,
-      review,
-      rating,
-    });
-    if (newreview) {
-      const response = {
+
+    const updatedReview = await reviewModal.findByIdAndUpdate(
+      id,
+      {
+        name,
+        review,
+        rating,
+        user_profile: imageUrl || undefined,
+      },
+      { new: true }
+    );
+
+    if (updatedReview) {
+      return res.status(200).json({
         status: 200,
-        message: "Success.",
-        data: newreview,
-      };
-      return res.status(200).send(response);
+        message: "Review updated successfully.",
+        data: updatedReview,
+      });
     } else {
-      const response = {
-        status: 201,
-        message: "Failed.",
-      };
-      return res.status(201).send(response);
+      return res.status(404).json({
+        status: 404,
+        message: "Review not found.",
+      });
     }
   } catch (error) {
     console.log("🚀 ~ updateReview ~ error:", error);
-    const responce = {
-      status: 501,
+    return res.status(500).json({
+      status: 500,
       message: "Internal Server Error",
-    };
-    return res.status(501).send(responce);
+      error: error.message,
+    });
   }
 };
+
 async function reviewDelete(req, res) {
   try {
     const { id } = req.params;

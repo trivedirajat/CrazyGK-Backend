@@ -10,14 +10,17 @@ var {
   getQuizBySubjectId,
   startQuiz,
   getQuizByFeatured,
+  submitQuiz,
 } = require("../controller/quizController");
+const { verifyTokenDb } = require("../middleware/tokenVerify");
 
 router.post("/addQuiz", addQuiz);
 router.post("/getQuizs", getAllQuiz);
 router.get("/getQuizs", getQuizWithSubject);
 router.get("/getQuizsbyFeatured", getQuizByFeatured);
 router.get("/getQuizsbySubject/:id", getQuizBySubjectId);
-router.get("/startQuiz/:id", startQuiz);
+router.get("/startQuiz", startQuiz);
+router.post("/submitQuiz", verifyTokenDb, submitQuiz);
 router.put("/updateQuiz/:id", UpdateQuiz);
 router.delete("/deleteQuiz/:id", deleteQuiz);
 // router.get('/getPlan', getPlan);

@@ -9,7 +9,7 @@ var {addSubjects, getSubjects, deleteSubjects} = require('../controller/subjectC
 
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
-        cb(null, "public/assets/subject/");
+        cb(null, "public/assets/subjects/");
     },
   
     filename: function (req, file, cb) {
