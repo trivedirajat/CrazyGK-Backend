@@ -17,7 +17,7 @@ const dataSchema = new mongoose.Schema({
   },
   email: {
     type: String,
-    unique: true, // Ensure email is unique
+    unique: true,
   },
   password: {
     type: String,
@@ -51,7 +51,7 @@ const dataSchema = new mongoose.Schema({
   },
   mobile: {
     type: Number,
-    unique: true, // Ensure mobile number is unique
+    unique: true,
   },
   otp: {
     type: Number,
@@ -89,8 +89,10 @@ dataSchema.methods.generateAuthToken = function () {
 
 dataSchema.pre("save", async function (next) {
   if (this.isModified("password") || this.isNew) {
+    console.log("this password", this.password);
     this.password = await hashPassword(this.password);
   }
+
   next();
 });
 
