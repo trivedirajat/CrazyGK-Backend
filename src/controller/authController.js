@@ -265,7 +265,7 @@ exports.verifyOTPAndSignup = async (req, res) => {
   }
 
   try {
-    const otpEntry = await OTP.findOne({
+    const otpEntry = await OTP.findOneAndDelete({
       otp,
       $or: [{ mobile: mobile || null }, { email: email || null }],
     }).exec();
@@ -277,6 +277,20 @@ exports.verifyOTPAndSignup = async (req, res) => {
       });
     }
 
+    const existingUser = await user
+      .findOne({
+        $or: [{ mobile: mobile || null }, { email: email || null }],
+      })
+      .exec();
+
+    if (existingUser) {
+      return res.status(400).send({
+        status: 400,
+        message: "User already exists.",
+      });
+    }
+
+    // Create new user and save once
     const newUser = new user({
       ...data,
       mobile: mobile || null,
@@ -285,9 +299,8 @@ exports.verifyOTPAndSignup = async (req, res) => {
       verified: true,
     });
 
+    // Save the new user to the database
     await newUser.save();
-
-    await OTP.deleteOne({ _id: otpEntry._id });
 
     return res.status(201).send({
       status: 201,
@@ -296,12 +309,17 @@ exports.verifyOTPAndSignup = async (req, res) => {
     });
   } catch (error) {
     console.error("Error:", error.message);
+
+    // Debugging suggestion: log the stack trace to understand the flow
+    console.error("Stack Trace:", error.stack);
+
     return res.status(500).send({
       status: 500,
       message: "Internal Server Error",
     });
   }
 };
+
 exports.updateProfile = async (req, res) => {
   try {
     const user_id = req.user_id;
