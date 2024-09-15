@@ -1,18 +1,50 @@
-var express = require("express");
-var jwt = require("jsonwebtoken");
+const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
-const saltRound = 10;
-const salt = bcrypt.genSaltSync(saltRound);
 const fs = require("fs");
 const path = require("path");
 const AWS = require("aws-sdk");
-function hashPassword(password) {
-  return bcrypt.hash(password, salt);
-}
-const comparePassword = (hashedPassword, password) => {
-  return bcrypt.compareSync(password, hashedPassword);
-};
+const saltRounds = 10;
+const { ObjectId } = require("mongodb");
 
+function isValidObjectId(id) {
+  return ObjectId.isValid(id);
+}
+function filterValidIds(input) {
+  if (Array.isArray(input)) {
+    return input.map((id) => ({
+      id,
+      valid: isValidObjectId(id),
+    }));
+  } else if (typeof input === "string") {
+    return [
+      {
+        id: input,
+        valid: isValidObjectId(input),
+      },
+    ];
+  } else {
+    return [];
+  }
+}
+// Asynchronous function to hash a password
+async function hashPassword(password) {
+  try {
+    const salt = await bcrypt.genSalt(saltRounds);
+    const hashedPassword = await bcrypt.hash(password, salt);
+    return hashedPassword;
+  } catch (error) {
+    throw new Error("Error hashing password: " + error.message);
+  }
+}
+
+async function comparePassword(hashedPassword, password) {
+  try {
+    const isMatch = await bcrypt.compare(password, hashedPassword);
+    return isMatch;
+  } catch (error) {
+    throw new Error("Error comparing password: " + error.message);
+  }
+}
 async function jwtToken(user_id, name, email, user_type, type) {
   const token = jwt.sign(
     {
@@ -145,6 +177,90 @@ const s3UploadImage = async (localFilePath, bucketFilePath) => {
     }
   });
 };
+const uploadAndSaveImage = async (req, fileFieldName, folderPath) => {
+  try {
+    const imageFile =
+      req.files && req.files[fileFieldName]
+        ? req.files[fileFieldName][0]
+        : null;
+
+    if (!imageFile) {
+      return { success: false, message: "No image file provided" };
+    }
+
+    // Save image locally
+    const localFilePath = path.join(folderPath, imageFile.filename);
+    req.body.image = imageFile.filename;
+
+    const bucketFilePath = `${fileFieldName}/${imageFile.filename}`;
+
+    try {
+      const s3Result = await s3UploadImage(localFilePath, bucketFilePath);
+      if (s3Result) {
+        fs.unlink(localFilePath, (err) => {
+          if (err)
+            console.log(`Failed to delete local file: ${localFilePath}`, err);
+        });
+        return { success: true, imageUrl: s3Result.Location };
+      }
+    } catch (s3Error) {
+      console.log("S3 upload failed:", s3Error);
+    }
+
+    return {
+      success: true,
+      imageUrl: `${process.env.SITEURL}/${folderPath}/${imageFile.filename}`,
+    };
+  } catch (error) {
+    console.error("Image upload failed:", error.message);
+    return { success: false, message: "Internal server error" };
+  }
+};
+const generateAccessToken = (user) => {
+  return jwt.sign(
+    { _id: user._id, user_type: user.user_type },
+    process.env.JWT_ACCESS_SECRET,
+    { expiresIn: "1m" }
+  );
+};
+
+// Generate Refresh Token
+const generateRefreshToken = (user) => {
+  return jwt.sign({ _id: user._id }, process.env.JWT_REFRESH_SECRET, {
+    expiresIn: "7d",
+  });
+};
+
+// Verify JWT Token
+const verifyToken = (token) => {
+  try {
+    return jwt.verify(token, process.env.JWT_ACCESS_SECRET);
+  } catch (err) {
+    return null;
+  }
+};
+
+// Verify Refresh Token
+const verifyRefreshToken = (token) => {
+  try {
+    return jwt.verify(token, process.env.JWT_REFRESH_SECRET);
+  } catch (err) {
+    return null;
+  }
+};
+const isAdmin = (req, res, next) => {
+  if (req.user.role !== "admin") {
+    return res.status(403).json({ message: "Access denied: Admins only" });
+  }
+  next();
+};
+
+const isUser = (req, res, next) => {
+  if (req.user.role !== "user") {
+    return res.status(403).json({ message: "Access denied: Users only" });
+  }
+  next();
+};
 module.exports = {
   jwtToken,
   hashPassword,
@@ -154,4 +270,13 @@ module.exports = {
   isJSONStringify,
   isValidUrl,
   s3UploadImage,
+  uploadAndSaveImage,
+  generateAccessToken,
+  generateRefreshToken,
+  verifyToken,
+  verifyRefreshToken,
+  isAdmin,
+  isUser,
+  isValidObjectId,
+  filterValidIds,
 };

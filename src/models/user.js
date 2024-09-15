@@ -1,5 +1,14 @@
 const mongoose = require("mongoose");
-const dataScema = new mongoose.Schema({
+const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
+const {
+  hashPassword,
+  generateAccessToken,
+  generateRefreshToken,
+} = require("../helper/helper");
+
+// Define your schema
+const dataSchema = new mongoose.Schema({
   user_name: {
     type: String,
   },
@@ -8,14 +17,16 @@ const dataScema = new mongoose.Schema({
   },
   email: {
     type: String,
+    unique: true, // Ensure email is unique
   },
   password: {
     type: String,
+    required: true,
   },
   gender: {
     type: String,
-    enum: ["male", "female"],
-    default: 'male'
+    enum: ["male", "female", "others", "not specified"],
+    default: "not specified",
   },
   birth_date: {
     type: String,
@@ -40,6 +51,7 @@ const dataScema = new mongoose.Schema({
   },
   mobile: {
     type: Number,
+    unique: true, // Ensure mobile number is unique
   },
   otp: {
     type: Number,
@@ -54,7 +66,7 @@ const dataScema = new mongoose.Schema({
   user_type: {
     type: String,
     enum: ["admin", "user"],
-    default: 'user'
+    default: "user",
   },
   verified: {
     type: Boolean,
@@ -66,4 +78,20 @@ const dataScema = new mongoose.Schema({
     required: true,
   },
 });
-module.exports = mongoose.model("user", dataScema);
+
+// Add method to generate JWT tokens
+dataSchema.methods.generateAuthToken = function () {
+  const accessToken = generateAccessToken(this);
+  const refreshToken = generateRefreshToken(this);
+
+  return { accessToken, refreshToken };
+};
+
+dataSchema.pre("save", async function (next) {
+  if (this.isModified("password") || this.isNew) {
+    this.password = await hashPassword(this.password);
+  }
+  next();
+});
+
+module.exports = mongoose.model("user", dataSchema);

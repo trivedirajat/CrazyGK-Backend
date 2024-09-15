@@ -1,5 +1,8 @@
 const { default: mongoose } = require("mongoose");
-var quizModel = require("../models/quiz");
+const QuizResult = require("../models/QuizeResulatModal");
+const quizModel = require("../models/quiz");
+const questions = require("../models/questions");
+const { filterValidIds } = require("../helper/helper");
 
 async function addQuiz(req, res) {
   try {
@@ -200,9 +203,26 @@ async function getQuizByFeatured(req, res) {
   }
 }
 async function startQuiz(req, res) {
+  const { QuizeId, subjectId } = req.query;
+  const [validQuizeId] = filterValidIds([QuizeId]);
+  if (!validQuizeId?.valid) {
+    return res.status(400).send({
+      status: 400,
+      message: "Invalid Quize Id.",
+    });
+  }
+  const query = {
+    isPublished: true,
+  };
+  if (QuizeId) {
+    query._id = validQuizeId?.id;
+  }
+  // if (subjectId) {
+  //   query.subject = validSubjectId;
+  // }
   try {
     const quizResponse = await quizModel
-      .find({ subject: req.params.id, isPublished: true })
+      .find(query)
       .populate({
         path: "subject",
         model: "subjects",
@@ -235,6 +255,7 @@ async function startQuiz(req, res) {
       message: "Failed to fetch quiz.",
     });
   } catch (error) {
+    console.log("🚀 ~ startQuiz ~ error:", error);
     const response = {
       status: 501,
       message: "Internal Server Error",
@@ -310,6 +331,103 @@ async function deleteQuiz(req, res) {
     return res.status(501).send(responce);
   }
 }
+
+// Controller to handle quiz submission
+const submitQuiz = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const quizSubmission = req.body[0];
+    const quizId = quizSubmission._id;
+    const quiz = await quizModel.findById(quizId);
+
+    if (!quiz) {
+      return res.status(404).json({ error: "Quiz not found" });
+    }
+
+    let totalScore = 0;
+    let totalMarks = quiz.totalMarks;
+    let correctAnswersCount = 0;
+    let totalQuestions = quizSubmission.selectedOptions.length;
+    const attemptResults = [];
+
+    for (const option of quizSubmission.selectedOptions) {
+      const { questionId, answers } = option;
+      const question = await questions.findById(questionId);
+
+      if (!question) {
+        return res
+          .status(404)
+          .json({ error: `Question ${questionId} not found` });
+      }
+
+      const correctOption = question.options.find(
+        (opt) => opt.isCorrect === true
+      );
+
+      const isCorrect = answers === correctOption._id.toString();
+
+      if (isCorrect) {
+        totalScore += question.marks;
+        correctAnswersCount++;
+      }
+
+      attemptResults.push({
+        questionId,
+        userAnswer: answers,
+        isCorrect,
+        marks: question.marks,
+      });
+    }
+
+    // Check if the user has already submitted this quiz
+    let quizResult = await QuizResult.findOne({ user: userId });
+
+    if (quizResult) {
+      // If the quiz result exists, push a new attempt into the quizAttempts array
+      quizResult.quizAttempts.push({
+        quizId,
+        score: totalScore,
+        totalMarks,
+        timeTaken: quizSubmission.timeTaken || 0,
+        attemptDate: Date.now(),
+        questions: attemptResults,
+      });
+      quizResult.lastAttemptDate = Date.now();
+    } else {
+      // If no quiz result exists, create a new result
+      quizResult = new QuizResult({
+        user: userId,
+        quizAttempts: [
+          {
+            quizId,
+            score: totalScore,
+            totalMarks,
+            timeTaken: quizSubmission.timeTaken || 0,
+            attemptDate: Date.now(),
+            questions: attemptResults,
+          },
+        ],
+        totalQuizzesTaken: 1,
+        lastAttemptDate: Date.now(),
+      });
+    }
+
+    await quizResult.save();
+
+    res.status(200).json({
+      message: "Quiz submitted successfully",
+      totalScore,
+      totalMarks,
+      correctAnswers: correctAnswersCount,
+      totalQuestions,
+      passed: totalScore >= quiz.passingMarks,
+    });
+  } catch (error) {
+    console.error("Error submitting quiz:", error);
+    res.status(500).json({ error: "Server error" });
+  }
+};
+
 module.exports = {
   addQuiz,
   getAllQuiz,
@@ -319,4 +437,5 @@ module.exports = {
   getQuizBySubjectId,
   getQuizByFeatured,
   startQuiz,
+  submitQuiz,
 };

@@ -9,7 +9,7 @@ var {addWhatsNew, getWhatsNew, deleteWhatsNew} = require('../controller/whatsNew
 
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
-        cb(null, "public/assets/blog/");
+        cb(null, "public/assets/whatsnew/");
     },
   
     filename: function (req, file, cb) {

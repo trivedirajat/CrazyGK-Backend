@@ -9,7 +9,7 @@ var {addBlog, getBlogs, deleteBlog} = require('../controller/blogController');
 
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
-        cb(null, "public/assets/blog/");
+        cb(null, "public/assets/blogs/");
     },
   
     filename: function (req, file, cb) {

@@ -9,7 +9,7 @@ var {addBook, getBooks, deleteBook} = require('../controller/bookController');
 
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
-        cb(null, "public/assets/book/");
+        cb(null, "public/assets/books/");
     },
   
     filename: function (req, file, cb) {
