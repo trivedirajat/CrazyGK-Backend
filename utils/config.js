@@ -1,0 +1,4 @@
+const ADMIN_SITEURL = process.env.ADMIN_SITEURL;
+const FRONTEND_SITEURL = process.env.FRONTEND_SITEURL;
+
+module.exports = { ADMIN_SITEURL, FRONTEND_SITEURL };
