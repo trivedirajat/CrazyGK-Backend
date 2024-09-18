@@ -157,13 +157,9 @@ exports.signup = async (req, res) => {
       });
     }
 
-    let query = {};
-    if (mobile) query.mobile = mobile;
-    if (email) query.email = email;
-
-    const existingUser = await user.findOne(query).exec();
-    console.log("🚀 ~ exports.signup= ~ existingUser:", existingUser);
-
+    const existingUser = await user
+      .findOne({ $or: [{ mobile }, { email }] })
+      .exec();
     if (existingUser) {
       return res.status(409).send({
         status: 409,
@@ -171,8 +167,7 @@ exports.signup = async (req, res) => {
       });
     }
 
-    // Generate OTP (using static 111111 for now, replace with actual OTP generation logic)
-    const otp = 111111;
+    const otp = generateOtp();
 
     const otpEntry = new OTP({
       otp,
@@ -255,8 +250,8 @@ exports.resentOtp = async (req, res) => {
 };
 
 exports.verifyOTPAndSignup = async (req, res) => {
-  const { mobile, email, otp, user_type = "user", data } = req.body;
-
+  const { otp, user_type = "user", data } = req.body;
+  const { mobile, email } = data;
   if (!otp || (!mobile && !email)) {
     return res.status(400).send({
       status: 400,
@@ -265,42 +260,33 @@ exports.verifyOTPAndSignup = async (req, res) => {
   }
 
   try {
-    const otpEntry = await OTP.findOneAndDelete({
-      otp,
-      $or: [{ mobile: mobile || null }, { email: email || null }],
-    }).exec();
+    const query = {};
+    if (mobile) query.mobile = mobile;
+    if (email) query.email = email;
 
-    if (!otpEntry) {
+    // Check OTP validity
+    const otpEntry = await OTP.findOne(query).exec();
+    if (!otpEntry || otpEntry.otp !== otp || otpEntry.expiresAt < Date.now()) {
       return res.status(400).send({
         status: 400,
         message: "Invalid or expired OTP.",
       });
     }
 
-    const existingUser = await user
-      .findOne({
-        $or: [{ mobile: mobile || null }, { email: email || null }],
-      })
-      .exec();
-
-    if (existingUser) {
-      return res.status(400).send({
-        status: 400,
-        message: "User already exists.",
-      });
-    }
-
-    // Create new user and save once
+    // OTP is valid, proceed with user creation
     const newUser = new user({
       ...data,
-      mobile: mobile || null,
-      email: email || null,
       user_type,
       verified: true,
+      mobile: mobile || null,
+      email: email || null,
     });
 
-    // Save the new user to the database
+    // Save new user
     await newUser.save();
+
+    // Delete OTP entry after successful user creation
+    await OTP.findOneAndDelete(query).exec();
 
     return res.status(201).send({
       status: 201,
@@ -309,10 +295,6 @@ exports.verifyOTPAndSignup = async (req, res) => {
     });
   } catch (error) {
     console.error("Error:", error.message);
-
-    // Debugging suggestion: log the stack trace to understand the flow
-    console.error("Stack Trace:", error.stack);
-
     return res.status(500).send({
       status: 500,
       message: "Internal Server Error",
@@ -503,10 +485,29 @@ exports.verifyOTPAndResetPassword = async (req, res) => {
   }
 };
 
-exports.login = async (req, res) => {
-  const { mobile, email, password } = req.body;
+const findUser = async (criteria) => {
+  return await user.findOne(criteria).exec();
+};
 
-  if (!password || (!mobile && !email)) {
+const validateUserCredentials = async (user, password) => {
+  const isPasswordValid = await comparePassword(user.password, password);
+  if (!isPasswordValid) {
+    throw new Error("Invalid credentials");
+  }
+  return user.generateAuthToken();
+};
+
+exports.login = async (req, res) => {
+  const { mobile, email, password, user_type } = req.body;
+
+  if (user_type === "admin") {
+    if (!password || !email) {
+      return res.status(400).send({
+        status: 400,
+        message: "Password or email are required.",
+      });
+    }
+  } else if (!password || (!mobile && !email)) {
     return res.status(400).send({
       status: 400,
       message: "Password and either mobile or email are required.",
@@ -514,11 +515,16 @@ exports.login = async (req, res) => {
   }
 
   try {
-    const userfound = await user
-      .findOne({
-        $or: [{ mobile: mobile || null }, { email: email || null }],
-      })
-      .exec();
+    const criteria =
+      user_type === "admin"
+        ? { email, user_type: "admin" }
+        : {
+            mobile,
+            user_type: "user",
+          };
+
+    const userfound = await findUser(criteria);
+    console.log("🚀 ~ exports.login= ~ criteria:", criteria);
 
     if (!userfound) {
       return res.status(404).send({
@@ -527,20 +533,28 @@ exports.login = async (req, res) => {
       });
     }
 
-    const isPasswordValid = await comparePassword(userfound.password, password);
-    if (!isPasswordValid) {
-      return res.status(401).send({
-        status: 401,
-        message: "Invalid credentials.",
-      });
-    }
-    const { accessToken, refreshToken } = await userfound.generateAuthToken();
+    const { accessToken, refreshToken } = await validateUserCredentials(
+      userfound,
+      password
+    );
+
     return res.status(200).send({
       status: 200,
       message: "Login successful.",
-      data: { accessToken, refreshToken, userfound },
+      data: {
+        accessToken,
+        refreshToken,
+        user: { ...userfound.toObject(), password: undefined },
+      },
     });
   } catch (error) {
+    if (error.message === "Invalid credentials") {
+      return res.status(401).send({
+        status: 401,
+        message: error.message,
+      });
+    }
+
     console.error("Error:", error.message);
     return res.status(500).send({
       status: 500,
