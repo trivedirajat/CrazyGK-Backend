@@ -10,11 +10,12 @@ const QuizAttemptSchema = new Schema({
   questions: [
     {
       questionId: { type: Schema.Types.ObjectId, ref: "Question" },
-      userAnswer: String,
+      userAnswer: [String], 
       isCorrect: Boolean,
     },
   ],
 });
+
 
 const QuizResultSchema = new Schema({
   user: { type: Schema.Types.ObjectId, ref: "User", required: true },

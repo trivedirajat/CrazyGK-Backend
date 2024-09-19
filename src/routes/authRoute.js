@@ -1,6 +1,6 @@
 var express = require("express");
 var router = express.Router();
-const { verifyToken } = require("../middleware/tokenVerify");
+const { verifyToken, verifyTokenDb } = require("../middleware/tokenVerify");
 
 var {
   checkMobile,
@@ -37,12 +37,12 @@ router.post("/otpVerify", verifyOTPAndSignup);
 router.post("/resentOtp", resentOtp);
 router.post("/forgotPassword", forgotPassword);
 router.post("/updatePassword", verifyOTPAndResetPassword);
-router.post("/changePassword", verifyToken, changePassword);
-router.post("/getUserList", verifyToken, getUserList);
+router.post("/changePassword", verifyTokenDb, changePassword);
+router.post("/getUserList", verifyTokenDb, getUserList);
 router.post("/refresh-token", SignrefreshToken);
 router.post(
   "/updateProfile",
-  verifyToken,
+  verifyTokenDb,
   upload.fields([{ name: "profile" }]),
   updateProfile
 );

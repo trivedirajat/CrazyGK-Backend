@@ -364,7 +364,7 @@ const submitQuiz = async (req, res) => {
         (opt) => opt.isCorrect === true
       );
 
-      const isCorrect = answers === correctOption._id.toString();
+      const isCorrect = answers.includes(correctOption._id.toString());
 
       if (isCorrect) {
         totalScore += question.marks;

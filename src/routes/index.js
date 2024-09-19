@@ -1,40 +1,43 @@
-var express = require('express');
-const { verifyToken } = require('../middleware/tokenVerify');
-var router = express.Router();
+const express = require("express");
+const router = express.Router();
 
-var tokenRoutes = require('./tokenRoute');
-var authRoutes = require('./authRoute');
-var subjectsRoutes = require('./subjectsRoute')
-var plansRoutes = require('./plansRoute')
-var videoRoutes = require('./videoRoute')
-var usersRoutes = require('./userRoute')
-var studyMaterials = require('./studyMaterialRoute')
-var bookRoutes = require('./bookRoute')
-var blogRoutes = require('./blogRoute')
-var currentAffairsRoutes = require('./currentAffairsRoute')
-var reviewRoutes = require('./reviewRoute')
-var whatsNewRoutes = require('./whatsNewRoute')
-var jobRoutes = require('./jobRoute')
-var dalyVocabRoutes = require('./dalyVocabRoute')
-var quizRoutes = require('./quizRoute')
-var questionRoutes = require('./questionRoute');
+const tokenRoutes = require("./tokenRoute");
+const authRoutes = require("./authRoute");
+const subjectsRoutes = require("./subjectsRoute");
+const plansRoutes = require("./plansRoute");
+const videoRoutes = require("./videoRoute");
+const usersRoutes = require("./userRoute");
+const studyMaterials = require("./studyMaterialRoute");
+const bookRoutes = require("./bookRoute");
+const blogRoutes = require("./blogRoute");
+const currentAffairsRoutes = require("./currentAffairsRoute");
+const reviewRoutes = require("./reviewRoute");
+const whatsNewRoutes = require("./whatsNewRoute");
+const jobRoutes = require("./jobRoute");
+const dalyVocabRoutes = require("./dalyVocabRoute");
+const quizRoutes = require("./quizRoute");
+const questionRoutes = require("./questionRoute");
+const { verifyTokenDb } = require("../middleware/tokenVerify");
+
 /* GET home page. */
 
-router.use('/token', tokenRoutes);
-router.use('/auth', authRoutes);
-router.use('/subjects', subjectsRoutes);
-router.use('/plans', plansRoutes);
-router.use('/video', videoRoutes);
-router.use('/users', usersRoutes);
-router.use('/studyMaterial', verifyToken, studyMaterials);
-router.use('/books', verifyToken, bookRoutes);
-router.use('/blogs', verifyToken, blogRoutes);
-router.use('/currentAffairs', verifyToken, currentAffairsRoutes);
-router.use('/review', verifyToken, reviewRoutes);
-router.use('/whatsNew', verifyToken, whatsNewRoutes);
-router.use('/job', verifyToken, jobRoutes);
-router.use('/dalyVocab', verifyToken, dalyVocabRoutes);
-router.use('/quiz', verifyToken, quizRoutes);
-router.use('/question', verifyToken, questionRoutes);
+router.use("/token", tokenRoutes);
+router.use("/auth", authRoutes);
+
+// Apply middleware conditionally
+router.use("/subjects", verifyTokenDb, subjectsRoutes);
+router.use("/plans", verifyTokenDb, plansRoutes);
+router.use("/video", verifyTokenDb, videoRoutes);
+router.use("/users", verifyTokenDb, usersRoutes);
+router.use("/studyMaterial", verifyTokenDb, studyMaterials);
+router.use("/books", verifyTokenDb, bookRoutes);
+router.use("/blogs", verifyTokenDb, blogRoutes);
+router.use("/currentAffairs", verifyTokenDb, currentAffairsRoutes);
+router.use("/review", verifyTokenDb, reviewRoutes);
+router.use("/whatsNew", verifyTokenDb, whatsNewRoutes);
+router.use("/job", verifyTokenDb, jobRoutes);
+router.use("/dalyVocab", verifyTokenDb, dalyVocabRoutes);
+router.use("/quiz", verifyTokenDb, quizRoutes);
+router.use("/question", verifyTokenDb, questionRoutes);
 
 module.exports = router;

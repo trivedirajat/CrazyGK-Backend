@@ -37,6 +37,13 @@ async function verifyToken(req, res, next) {
   });
 }
 const verifyTokenDb = async (req, res, next) => {
+  console.log("🚀 ~ verifyTokenDb ~ requireAuth:", req);
+  const requireAuth = req.headers["require-auth"] === "true";
+
+  if (!requireAuth) {
+    return next();
+  }
+
   const token = req.header("Authorization")?.split(" ")[1];
 
   if (!token) {

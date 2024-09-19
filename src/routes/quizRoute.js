@@ -20,7 +20,7 @@ router.get("/getQuizs", getQuizWithSubject);
 router.get("/getQuizsbyFeatured", getQuizByFeatured);
 router.get("/getQuizsbySubject/:id", getQuizBySubjectId);
 router.get("/startQuiz", startQuiz);
-router.post("/submitQuiz", verifyTokenDb, submitQuiz);
+router.post("/submitQuiz", submitQuiz);
 router.put("/updateQuiz/:id", UpdateQuiz);
 router.delete("/deleteQuiz/:id", deleteQuiz);
 // router.get('/getPlan', getPlan);
