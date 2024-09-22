@@ -31,7 +31,7 @@ router.post(
 );
 // router.post("/addReview", upload.fields([{ name: "user_profile" }]), addReview);
 router.get("/getReviews", getReviews);
-router.get("/getreviewbyid", getReviewbyId);
+router.get("/getreviewbyid/:id", getReviewbyId);
 router.put(
   "/editReview/:id",
   upload.fields([{ name: "user_profile" }]),

@@ -1,97 +1,109 @@
-var subjects = require("../models/subjects");
 const currentAffairs = require("../models/currentAffairs");
 var { ObjectId } = require("mongodb");
 var moment = require("moment");
-const { s3UploadImage } = require("../helper/helper");
+const { generateTOCFromHtml } = require("../helper/helper");
 
-async function addCurrentAffairs(req, res) {
+const addCurrentAffairs = async (req, res) => {
   try {
-    // const user_id = req.user_id
-    // if(user_id === undefined || user_id === ''){
-    //     var responce = {
-    //         status: 403,
-    //         message: 'User not authorised.',
-    //     }
-    //     return res.status(403).send(responce);
-    // }
-    const { currentAffairs_id, title, subject_id, decription } = req.body;
-    if (title != "" && subject_id != "") {
-      if (
-        req.files &&
-        typeof req.files.image != undefined &&
-        req.files.image != null
-      ) {
-        req.body.image = req.files.image[0].filename;
-        bucketFilePath = "currentAffairs/" + req.files.image[0].filename;
-        const localFilePath =
-          req.files.image[0].destination + req.files.image[0].filename;
-        const imageUpload = await s3UploadImage(localFilePath, bucketFilePath);
-        req.body.image = bucketFilePath;
-      }
-      if (currentAffairs_id != undefined && currentAffairs_id != "") {
-        var result = await currentAffairs.updateOne(
-          { _id: new ObjectId(currentAffairs_id) },
-          req.body
-        );
-        var msg = "Update ";
-        var results = await currentAffairs.find({
-          _id: new ObjectId(currentAffairs_id),
-        });
-        if (result) {
-          result = results != undefined ? results : result;
+    const { title, description, status, is_important, date } = req.body;
+    const toc = generateTOCFromHtml(description) || [];
+    const newAffair = new currentAffairs({
+      title,
+      description,
+      status,
+      is_important,
+      date,
+      toc,
+    });
 
-          var response = {
-            status: 200,
-            message: `${msg} Successfully`,
-            data: result,
-            base_url: process.env.BASEURL,
-          };
-          return res.status(200).send(response);
-        } else {
-          var response = {
-            status: 201,
-            message: `${msg} Failed.`,
-          };
-          return res.status(201).send(response);
-        }
-      } else {
-        var result = await currentAffairs.create(req.body);
-        var msg = "Add ";
-        if (result) {
-          result = results != undefined ? results : result;
-
-          var response = {
-            status: 200,
-            message: `${msg} Successfully`,
-            data: result,
-            base_url: process.env.BASEURL,
-          };
-          return res.status(200).send(response);
-        } else {
-          var response = {
-            status: 201,
-            message: `${msg} Failed.`,
-          };
-          return res.status(201).send(response);
-        }
-      }
-    } else {
-      var response = {
-        status: 201,
-        message: "Can not be empty value.",
-      };
-      return res.status(201).send(response);
-    }
+    await newAffair.save();
+    return res
+      .status(201)
+      .json({ message: "Current Affair added successfully", data: newAffair });
   } catch (error) {
-    console.log("error", error.message);
-    var responce = {
-      status: 501,
-      message: "Internal Server Error",
-    };
-    return res.status(501).send(responce);
+    return res
+      .status(500)
+      .json({ message: "Failed to add current affair", error: error.message });
   }
-}
-async function getCurrentAffairs(req, res) {
+};
+const getCurrentAffairs = async (req, res) => {
+  const { type, date, topic, offset = 1, limit = 10 } = req.query;
+  const page = Math.max(0, Number(offset) - 1); // Pages should start from 0 for pagination
+  const perPage = Math.max(1, Number(limit));
+
+  try {
+    const query = {};
+    let total;
+
+    // Ensure the date is valid
+    if (date && !moment(date, "YYYY-MM-DD", true).isValid()) {
+      return res.status(400).json({
+        message: "Invalid date format. Use YYYY-MM-DD format.",
+      });
+    }
+
+    // Construct the query based on the parameters
+    if (type === "daily" && date) {
+      // Convert the date into a full-day range (startOf and endOf ensure full coverage of the day)
+      query.date = {
+        $gte: moment(date, "YYYY-MM-DD").startOf("day").toDate(), // start of the day
+        $lt: moment(date, "YYYY-MM-DD").endOf("day").toDate(), // end of the day
+      };
+    } else if (type === "monthly" && date) {
+      // Monthly type filter
+      const startOfMonth = moment(date, "YYYY-MM-DD").startOf("month").toDate();
+      const endOfMonth = moment(date, "YYYY-MM-DD").endOf("month").toDate();
+      query.date = { $gte: startOfMonth, $lt: endOfMonth };
+    } else if (type === "editorial") {
+      // Filter for important current affairs
+      query.is_important = true;
+    } else if (topic) {
+      // Filter based on topic
+      query.topic = topic;
+    }
+
+    // If no query parameters are provided, return all current affairs
+    total = await currentAffairs.countDocuments(query);
+
+    const affairs = await currentAffairs
+      .find(query)
+      .sort({ createdDate: "desc" })
+      .skip(perPage * page)
+      .limit(perPage);
+
+    return res.status(200).json({
+      data: affairs,
+      total_data: total,
+      current_page: page + 1, // Adjust for zero-based page index
+      per_page: perPage,
+      total_pages: Math.ceil(total / perPage),
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Error fetching current affairs",
+      error: error.message,
+    });
+  }
+};
+const getCurrentAffairsById = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const currentAffair = await currentAffairs.findById(id);
+
+    if (!currentAffair) {
+      return res.status(404).json({ message: "Current affairs not found" });
+    }
+
+    return res.status(200).json({ data: currentAffair });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Error fetching current affairs",
+      error: error.message,
+    });
+  }
+};
+async function getCurrentAffairss(req, res) {
   try {
     // const user_id = req.user_id
     // if(user_id === undefined || user_id === ''){
@@ -223,35 +235,27 @@ async function getAllCurrentAffairs(req, res) {
     return res.status(501).send(responce);
   }
 }
-async function deleteCurrentAffairs(req, res) {
-  try {
-    // const user_id = req.user_id;
-    // if (user_id === undefined || user_id === "") {
-    //   var responce = {
-    //     status: 403,
-    //     message: "User not authorised.",
-    //   };
-    //   return res.status(403).send(responce);
-    // }
-    const { currentAffairs_id } = req.body;
+const deleteCurrentAffairs = async (req, res) => {
+  const { id } = req.params;
 
-    const result = await currentAffairs.deleteOne({
-      _id: new ObjectId(currentAffairs_id),
+  try {
+    const deletedAffair = await currentAffairs.findByIdAndDelete(id);
+
+    if (!deletedAffair) {
+      return res.status(404).json({ message: "Current affairs not found" });
+    }
+
+    return res.status(200).json({
+      message: "Current affairs deleted successfully",
+      data: deletedAffair,
     });
-    var response = {
-      status: 200,
-      message: "Success.",
-    };
-    return res.status(200).send(response);
   } catch (error) {
-    console.log("error", error.message);
-    var responce = {
-      status: 501,
-      message: "Internal Server Error",
-    };
-    return res.status(501).send(responce);
+    return res.status(500).json({
+      message: "Error deleting current affairs",
+      error: error.message,
+    });
   }
-}
+};
 async function currentAffairsStatusUpdate(req, res) {
   try {
     const user_id = req.user_id;
@@ -282,11 +286,42 @@ async function currentAffairsStatusUpdate(req, res) {
     return res.status(501).send(responce);
   }
 }
+const editCurrentAffairs = async (req, res) => {
+  const { id } = req.params;
+  const { title, description, status, is_important, date } = req.body;
 
+  try {
+    const currentAffair = await currentAffairs.findById(id);
+
+    if (!currentAffair) {
+      return res.status(404).json({ message: "Current affairs not found" });
+    }
+
+    currentAffair.title = title ?? currentAffair.title;
+    currentAffair.description = description ?? currentAffair.description;
+    currentAffair.status = status ?? currentAffair.status;
+    currentAffair.is_important = is_important ?? currentAffair.is_important;
+    currentAffair.date = date ? new Date(date) : currentAffair.date;
+
+    await currentAffair.save();
+
+    return res.status(200).json({
+      message: "Current affairs updated successfully",
+      data: currentAffair,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Error updating current affairs",
+      error: error.message,
+    });
+  }
+};
 module.exports = {
   addCurrentAffairs,
   getCurrentAffairs,
   deleteCurrentAffairs,
   currentAffairsStatusUpdate,
   getAllCurrentAffairs,
+  getCurrentAffairsById,
+  editCurrentAffairs,
 };

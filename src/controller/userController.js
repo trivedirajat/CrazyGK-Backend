@@ -53,33 +53,52 @@ async function getUserList(req, res) {
 }
 const getAllUsers = async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
+    const { limit = 10, page = 1, user_type = "user", user_id } = req.query;
+    
+    const perPage = Math.max(1, Number(limit)); 
+    const currentPage = Math.max(1, Number(page)) - 1; 
 
-    const skip = (page - 1) * limit;
+    let query = { user_type };  
 
+    if (user_id) {
+      query._id = user_id;
+    }
+
+    
     const users = await user
-      .find({ user_type: "user" })
-      .skip(skip)
-      .limit(limit);
+      .find(query)
+      .skip(perPage * currentPage) 
+      .limit(perPage) 
+      .sort({ name: "asc" })  
+      .exec();
 
-    const totalUsers = await user.countDocuments({ user_type: "user" });
-
-    res.status(200).json({
-      success: true,
-      data: users,
-      total: totalUsers,
-      page: page,
-      limit: limit,
-    });
+ 
+    const totalUsers = await user.countDocuments(query);
+    if (users.length > 0) {
+      return res.status(200).json({
+        success: true,
+        message: "Users fetched successfully",
+        data: users,
+        total_data: totalUsers,
+        current_page: currentPage + 1,  
+        per_page: perPage,
+        total_pages: Math.ceil(totalUsers / perPage),  
+      });
+    } else {
+      return res.status(404).json({
+        success: false,
+        message: "No users found",
+      });
+    }
   } catch (error) {
-    res.status(500).json({
+    console.error("Error fetching users:", error.message);
+    return res.status(500).json({
       success: false,
-      message: "An error occurred while fetching users",
-      error: error.message,
+      message: "Internal Server Error",
     });
   }
 };
+
 
 async function updateUser(req, res) {
   try {

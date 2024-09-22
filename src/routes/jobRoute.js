@@ -8,11 +8,13 @@ var {
   getJob,
   deleteJob,
   UpdateJobs,
+  getJobById,
 } = require("../controller/jobController");
 
 router.post("/addJob", addJob);
-router.post("/getJob", getJob);
-router.post("/updateJob", UpdateJobs);
-router.post("/deleteJob", deleteJob);
+router.get("/getJob", getJob);
+router.get("/getJobById/:id", getJobById);
+router.put("/editJob/:id", UpdateJobs);
+router.delete("/deleteJob/:id", deleteJob);
 
 module.exports = router;

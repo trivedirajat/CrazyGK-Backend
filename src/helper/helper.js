@@ -3,6 +3,7 @@ const bcrypt = require("bcrypt");
 const fs = require("fs");
 const path = require("path");
 const AWS = require("aws-sdk");
+const cheerio = require("cheerio");
 const saltRounds = 10;
 const { ObjectId } = require("mongodb");
 
@@ -220,7 +221,7 @@ const generateAccessToken = (user) => {
   return jwt.sign(
     { _id: user._id, user_type: user.user_type },
     process.env.JWT_ACCESS_SECRET,
-    { expiresIn: "1m" }
+    { expiresIn: "15m" }
   );
 };
 
@@ -261,6 +262,27 @@ const isUser = (req, res, next) => {
   }
   next();
 };
+
+function generateTOCFromHtml(htmlContent) {
+  if (!htmlContent || typeof htmlContent !== "string") {
+    return [];
+  }
+
+  const $ = cheerio.load(htmlContent);
+  const headings = $("h1, h2, h3, h4, h5");
+
+  const toc = [];
+  headings.each((index, element) => {
+    const level = element.tagName.toLowerCase();
+    const text = $(element).text();
+    const id = text.toLowerCase().replace(/\s+/g, "-"); 
+
+    toc.push({ text, id, level });
+  });
+
+  return toc;
+}
+
 module.exports = {
   jwtToken,
   hashPassword,
@@ -279,4 +301,5 @@ module.exports = {
   isUser,
   isValidObjectId,
   filterValidIds,
+  generateTOCFromHtml,
 };

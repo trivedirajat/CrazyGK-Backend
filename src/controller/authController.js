@@ -720,16 +720,20 @@ exports.SignrefreshToken = async (req, res) => {
   const { refresh_token } = req.body;
 
   if (!refresh_token) {
-    return res.status(401).json({ error: "No refresh token provided." });
+    return res.status(400).json({ error: "No refresh token provided." });
   }
 
   try {
     const UserDetails = await verifyRefreshToken(refresh_token);
+    if (!UserDetails) {
+      return res.status(440).json({ error: "Invalid refresh token." });
+    }
     const accessToken = generateAccessToken(UserDetails);
+    console.log("🚀 ~ exports.SignrefreshToken= ~ UserDetails:", UserDetails);
 
     res.json({ accessToken });
   } catch (error) {
-    console.error("🚀 ~ /refresh-token ~ error:", error);
-    return res.status(401).json({ error: error.message });
+    console.error("🚀 ~ exports.SignrefreshToken= ~ error:", error);
+    return res.status(440).json({ error: error.message });
   }
 };

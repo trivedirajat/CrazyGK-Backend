@@ -27,62 +27,67 @@ async function addQuestion(req, res) {
 
 async function getAllQuestion(req, res) {
   try {
-    let { id } = req.params;
+    const { id } = req.params;
+
     if (id) {
-      const questionResponse = await questionModel.findOne({
-        _id: new mongoose.Types.ObjectId(id),
-      });
+      const questionResponse = await questionModel
+        .findOne({ _id: new mongoose.Types.ObjectId(id) })
+        .populate({
+          path: "subject",
+          select: "subject_name",
+        });
+
       if (questionResponse) {
         return res.status(200).send({
           status: 200,
-          message: `Questions fetched Successfully.`,
+          message: "Question fetched successfully.",
           data: questionResponse,
         });
       }
-      return res.status(400).send({
-        status: 400,
-        message: "Failed to fetch Questions.",
+
+      return res.status(404).send({
+        status: 404,
+        message: "Question not found.",
       });
     }
-    let { page, limit } = req.query;
-    if (page <= 1) {
-      page = 0;
-    }
-    if (limit > 20) {
-      limit = 20;
-    }
-    const questionResponse = await questionModel
+
+    // Fetch all questions with pagination
+    let { page = 0, limit = 10 } = req.query;
+    page = Math.max(0, page);
+    limit = Math.max(1, Number(limit));
+
+    const questions = await questionModel
       .find()
+      .skip(limit * page)
+      .limit(limit)
+      .sort({ createdDate: "desc" })
       .populate({
         path: "subject",
-        model: "subjects",
-        select: "subject_name",
+        select: "_id subject_name",
       })
-      .limit(limit)
-      .skip(limit * page);
-    const questionCount = await questionModel.count();
-    if (questionResponse) {
-      return res.status(200).send({
-        status: 200,
-        message: `Questions fetched Successfully.`,
-        data: questionResponse,
-        count: questionCount,
-      });
-    } else {
-      return res.status(400).send({
-        status: 400,
-        message: "Failed to fetch Questions.",
-      });
-    }
+      .exec();
+
+    const totalQuestions = await questionModel.countDocuments();
+
+    return res.status(200).send({
+      status: 200,
+      message: "Questions fetched successfully.",
+      data: questions,
+      total: totalQuestions,
+      total_data: totalQuestions,
+      current_page: page,
+      per_page: limit,
+      total_pages: Math.ceil(totalQuestions / limit),
+    });
   } catch (error) {
-    console.log("Error", error);
-    var responce = {
-      status: 501,
+    console.error("Error fetching questions:", error);
+    return res.status(500).send({
+      status: 500,
       message: "Internal Server Error",
-    };
-    return res.status(501).send(responce);
+    });
   }
 }
+
 async function getQuestionsListbySubjectid(req, res) {
   try {
     let { subjectId } = req.params;
@@ -122,7 +127,6 @@ async function editQuestion(req, res) {
   try {
     const questionResponse = await questionModel.findById(id);
     const { question, options, marks, isPublished, time, subject } = req.body;
-    console.log("questionResponse", questionResponse);
     questionResponse.question = question;
     questionResponse.options = options;
     questionResponse.marks = marks;

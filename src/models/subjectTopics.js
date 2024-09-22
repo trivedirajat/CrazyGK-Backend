@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 const dataScema = new mongoose.Schema({
   topic_name: {
     type: String,
-  },  
+  },
   containt: {
     // type: Array,
     type: String,
@@ -17,10 +17,14 @@ const dataScema = new mongoose.Schema({
     type: Boolean,
     default: true,
   },
+  sortContent: {
+    type: String,
+  },
   createdDate: {
     type: Date,
     default: Date.now,
     required: true,
   },
 });
+
 module.exports = mongoose.model("subjectTopics", dataScema);
