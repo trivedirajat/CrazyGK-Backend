@@ -12,6 +12,7 @@ var {
   getStudyById,
   getAllStudyMaterials,
   editStudyMaterial,
+  getstudyMaterialBySubjectId,
 } = require("../controller/studyMaterialController");
 
 router.post("/addStudyMaterial", addStudyMaterial);
@@ -24,5 +25,5 @@ router.post("/getSubjectTopics", getSubjectTopics);
 router.get("/getStudyById/:id", getStudyById);
 router.get("/getallstudyMaterial", getAllStudyMaterials);
 router.post("/deleteSubjectTopics", deleteSubjectTopics);
-
+router.get("/getstudyMaterialBySubjectId/:id", getstudyMaterialBySubjectId);
 module.exports = router;

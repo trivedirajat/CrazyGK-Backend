@@ -265,7 +265,7 @@ const isUser = (req, res, next) => {
 
 function generateTOCFromHtml(htmlContent) {
   if (!htmlContent || typeof htmlContent !== "string") {
-    return [];
+    return { toc: [], updatedHtml: htmlContent };
   }
 
   const $ = cheerio.load(htmlContent);
@@ -276,11 +276,13 @@ function generateTOCFromHtml(htmlContent) {
     const level = element.tagName.toLowerCase();
     const text = $(element).text();
     const id = text.toLowerCase().replace(/\s+/g, "-"); 
+    $(element).attr("id", id);
 
     toc.push({ text, id, level });
   });
 
-  return toc;
+  const updatedHtml = $.html();
+  return { toc, updatedHtml };
 }
 
 module.exports = {

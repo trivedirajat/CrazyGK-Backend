@@ -6,10 +6,10 @@ const { generateTOCFromHtml } = require("../helper/helper");
 const addCurrentAffairs = async (req, res) => {
   try {
     const { title, description, status, is_important, date } = req.body;
-    const toc = generateTOCFromHtml(description) || [];
+    const { toc, updatedHtml } = generateTOCFromHtml(description) || [];
     const newAffair = new currentAffairs({
       title,
-      description,
+      description: updatedHtml || description,
       status,
       is_important,
       date,
@@ -27,10 +27,14 @@ const addCurrentAffairs = async (req, res) => {
   }
 };
 const getCurrentAffairs = async (req, res) => {
-  const { type, date, topic, offset = 1, limit = 10 } = req.query;
+  const { type, date, topic, offset = 1, limit = 10, onlytopic } = req.query;
   const page = Math.max(0, Number(offset) - 1); // Pages should start from 0 for pagination
   const perPage = Math.max(1, Number(limit));
+  let projection = { toc: 0, description: 0 };
 
+  if (onlytopic === "true") {
+    projection = { title: 1, is_important: 1, date: 1 };
+  }
   try {
     const query = {};
     let total;
@@ -61,12 +65,13 @@ const getCurrentAffairs = async (req, res) => {
       // Filter based on topic
       query.topic = topic;
     }
-
     // If no query parameters are provided, return all current affairs
     total = await currentAffairs.countDocuments(query);
 
     const affairs = await currentAffairs
+
       .find(query)
+      .select(projection)
       .sort({ createdDate: "desc" })
       .skip(perPage * page)
       .limit(perPage);
@@ -296,13 +301,13 @@ const editCurrentAffairs = async (req, res) => {
     if (!currentAffair) {
       return res.status(404).json({ message: "Current affairs not found" });
     }
-
+    const { toc, updatedHtml } = generateTOCFromHtml(description) || [];
     currentAffair.title = title ?? currentAffair.title;
-    currentAffair.description = description ?? currentAffair.description;
+    currentAffair.description = updatedHtml ?? currentAffair.description;
     currentAffair.status = status ?? currentAffair.status;
     currentAffair.is_important = is_important ?? currentAffair.is_important;
     currentAffair.date = date ? new Date(date) : currentAffair.date;
-
+    currentAffair.toc = toc ?? currentAffair.toc;
     await currentAffair.save();
 
     return res.status(200).json({

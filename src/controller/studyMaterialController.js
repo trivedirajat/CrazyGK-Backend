@@ -1,3 +1,4 @@
+const { isValidObjectId } = require("../helper/helper");
 const studyMaterialModal = require("../models/studyMaterialModal");
 const subjectTopics = require("../models/subjectTopics");
 var { ObjectId } = require("mongodb");
@@ -463,6 +464,45 @@ async function getStudyById(req, res) {
     });
   }
 }
+async function getstudyMaterialBySubjectId(req, res) {
+  try {
+    const { id } = req.params;
+
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({
+        status: 400,
+        message: "Invalid subject ID.",
+      });
+    }
+
+    const result = await studyMaterialModal
+      .find({ subject_id: new ObjectId(id) })
+      .populate("subject_id")
+      .exec();
+
+    if (result) {
+      return res.status(200).json({
+        status: 200,
+        message: "Success",
+        data: {
+          studyMaterials: result,
+          subjectDetails: result[0]?.subject_id || {},
+        },
+      });
+    } else {
+      return res.status(404).json({
+        status: 404,
+        message: "Not found",
+      });
+    }
+  } catch (error) {
+    return res.status(500).json({
+      status: 500,
+      message: "Internal Server Error",
+      error: error.message,
+    });
+  }
+}
 const getAllStudyMaterials = async (req, res) => {
   try {
     const {
@@ -581,4 +621,5 @@ module.exports = {
   getStudyById,
   getAllStudyMaterials,
   editStudyMaterial,
+  getstudyMaterialBySubjectId,
 };
