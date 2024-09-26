@@ -1,4 +1,4 @@
-const { isValidObjectId } = require("../helper/helper");
+const { isValidObjectId, generateTOCFromHtml } = require("../helper/helper");
 const studyMaterialModal = require("../models/studyMaterialModal");
 const subjectTopics = require("../models/subjectTopics");
 var { ObjectId } = require("mongodb");
@@ -80,7 +80,7 @@ var { ObjectId } = require("mongodb");
 const addStudyMaterial = async (req, res) => {
   try {
     const { topic_name, containt, subject_id, status } = req.body;
-
+    const { toc, updatedHtml } = generateTOCFromHtml(containt) || [];
     if (!topic_name || !containt || !subject_id) {
       return res
         .status(400)
@@ -89,8 +89,9 @@ const addStudyMaterial = async (req, res) => {
 
     const newStudyMaterial = new studyMaterialModal({
       topic_name,
-      containt,
+      containt: updatedHtml || containt,
       subject_id,
+      toc: toc || [],
       status: status !== undefined ? status : true,
     });
 
@@ -130,9 +131,10 @@ const editStudyMaterial = async (req, res) => {
     if (!studyMaterial) {
       return res.status(404).json({ message: "Study material not found" });
     }
-
+    const { toc, updatedHtml } = generateTOCFromHtml(containt) || [];
     studyMaterial.topic_name = topic_name;
-    studyMaterial.containt = containt;
+    studyMaterial.containt = updatedHtml ?? containt;
+    studyMaterial.toc = toc ?? studyMaterial.toc;
     studyMaterial.subject_id = subject_id;
     studyMaterial.status = status !== undefined ? status : true;
 
@@ -432,14 +434,13 @@ async function getSubjectTopics(req, res) {
 async function getStudyById(req, res) {
   try {
     const { id } = req.params;
-
-    const study_id = id;
-    if (!study_id) {
+    if (!isValidObjectId(id)) {
       return res.status(400).json({
         status: 400,
-        message: "Bad Request: 'study_id' query parameter is required.",
+        message: "Invalid study ID.",
       });
     }
+    const study_id = id;
 
     const result = await studyMaterialModal.findById(study_id);
 
@@ -467,6 +468,7 @@ async function getStudyById(req, res) {
 async function getstudyMaterialBySubjectId(req, res) {
   try {
     const { id } = req.params;
+    const { onlytopics } = req.query;
 
     if (!isValidObjectId(id)) {
       return res.status(400).json({
@@ -475,18 +477,26 @@ async function getstudyMaterialBySubjectId(req, res) {
       });
     }
 
-    const result = await studyMaterialModal
-      .find({ subject_id: new ObjectId(id) })
-      .populate("subject_id")
-      .exec();
+    const projection = onlytopics === "true" ? { topic_name: 1, _id: 1 } : {};
 
-    if (result) {
+    let query = studyMaterialModal
+      .find({ subject_id: new ObjectId(id) })
+      .select(projection);
+
+    if (onlytopics !== "true") {
+      query = query.populate("subject_id");
+    }
+
+    const result = await query.exec();
+
+    if (result && result.length > 0) {
       return res.status(200).json({
         status: 200,
         message: "Success",
         data: {
           studyMaterials: result,
-          subjectDetails: result[0]?.subject_id || {},
+          subjectDetails:
+            onlytopics !== "true" ? result[0]?.subject_id || {} : {},
         },
       });
     } else {
@@ -503,6 +513,7 @@ async function getstudyMaterialBySubjectId(req, res) {
     });
   }
 }
+
 const getAllStudyMaterials = async (req, res) => {
   try {
     const {

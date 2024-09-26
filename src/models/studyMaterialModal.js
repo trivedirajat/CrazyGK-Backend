@@ -12,6 +12,13 @@ const dataScema = new mongoose.Schema({
     type: Boolean,
     default: true,
   },
+  toc: [
+    {
+      text: { type: String },
+      id: { type: String },
+      level: { type: String },
+    },
+  ],
   containt: {
     type: String,
   },
