@@ -1,27 +1,27 @@
-var express = require('express');
+var express = require("express");
 var router = express.Router();
 
 const multer = require("multer");
 
-
-var {addBlog, getBlogs, deleteBlog} = require('../controller/blogController');
-
+var { addBlog, getBlogs, deleteBlog, getBlogById, editBlog } = require("../controller/blogController");
 
 const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        cb(null, "public/assets/blogs/");
-    },
-  
-    filename: function (req, file, cb) {
-        const ext = file.originalname.split('.').pop();
-        const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-        cb(null, "blog-" + uniqueSuffix + '.' + ext);
-    },
-  });
-  const upload = multer({ storage: storage });
+  destination: function (req, file, cb) {
+    cb(null, "public/assets/blogs/");
+  },
 
-router.post('/addBlog', upload.fields([{ name: "image" }]), addBlog);
-router.post('/getBlogs', getBlogs);
-router.post('/deleteBlog', deleteBlog);
+  filename: function (req, file, cb) {
+    const ext = file.originalname.split(".").pop();
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(null, "blog-" + uniqueSuffix + "." + ext);
+  },
+});
+const upload = multer({ storage: storage });
+
+router.post("/addBlog", upload.fields([{ name: "image" }]), addBlog);
+router.put("/editBlog/:id", upload.fields([{ name: "image" }]), editBlog);
+router.get("/getBlogs", getBlogs);
+router.get("/getBlogById/:id", getBlogById);
+router.delete("/deleteBlog/:id", deleteBlog);
 
 module.exports = router;

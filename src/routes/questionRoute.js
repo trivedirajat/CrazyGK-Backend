@@ -10,8 +10,8 @@ var {
   getQuestionsListbySubjectid,
 } = require("../controller/questionController");
 
-router.get("/", getAllQuestion);
-router.get("/:id", getAllQuestion);
+router.get("/getquestion", getAllQuestion);
+router.get("/getquestion/:id", getAllQuestion);
 router.get(
   "/getQuestionsListbySubjectid/:subjectId",
   getQuestionsListbySubjectid

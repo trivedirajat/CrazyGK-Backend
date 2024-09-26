@@ -15,6 +15,7 @@ var {
   verifyOTPAndResetPassword,
   verifyUser,
   SignrefreshToken,
+  GoogleAuth,
 } = require("../controller/authController");
 const multer = require("multer");
 const storage = multer.diskStorage({
@@ -40,6 +41,7 @@ router.post("/updatePassword", verifyOTPAndResetPassword);
 router.post("/changePassword", verifyTokenDb, changePassword);
 router.post("/getUserList", verifyTokenDb, getUserList);
 router.post("/refresh-token", SignrefreshToken);
+// router.post("/googleauth", GoogleAuth);
 router.post(
   "/updateProfile",
   verifyTokenDb,
