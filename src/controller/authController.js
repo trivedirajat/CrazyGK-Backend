@@ -1,16 +1,18 @@
-var user = require("../models/user");
-var {
+const user = require("../models/user");
+const {
   hashPassword,
   comparePassword,
   s3UploadImage,
   generateAccessToken,
   verifyRefreshToken,
 } = require("../helper/helper");
-var sendemails = require("../helper/mailSend");
+const sendemails = require("../helper/mailSend");
+// const FirebaseAdmin = require("../helper/FirebaseAdmin");
 const { jwtToken } = require("../helper/helper");
 const { isNumber } = require("razorpay/dist/utils/razorpay-utils");
-var { ObjectId } = require("mongodb");
+const { ObjectId } = require("mongodb");
 const OTP = require("../models/OtpModal");
+const { UserDetail } = require("otpless-node-js-auth-sdk");
 const isValidNumber = (str) => !isNaN(str) && !isNaN(parseFloat(str));
 exports.verifyUser = async (req, res) => {
   const { id } = req.params;
@@ -737,3 +739,27 @@ exports.SignrefreshToken = async (req, res) => {
     return res.status(440).json({ error: error.message });
   }
 };
+// exports.GoogleAuth = async (req, res) => {
+//   const { idToken } = req.body;
+
+//   try {
+//     const decodedToken = await FirebaseAdmin.auth().verifyIdToken(idToken);
+//     const uid = decodedToken.uid;
+
+//     const { email, name } = decodedToken;
+
+//     // Handle your application logic (e.g., store user in database)
+//     // const user = await User.findOrCreate({ email });
+
+//     // Send success response
+//     res.status(200).json({
+//       message: "Login successful",
+//       user: { uid, email, name },
+//     });
+//   } catch (error) {
+//     console.error("Error verifying ID token:", error);
+//     res.status(401).json({
+//       message: "Unauthorized - Invalid ID token",
+//     });
+//   }
+// };

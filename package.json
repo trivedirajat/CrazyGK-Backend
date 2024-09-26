@@ -18,6 +18,7 @@
     "dotenv": "^16.0.3",
     "express": "^4.18.2",
     "extract-zip": "^2.0.1",
+    "firebase-admin": "^12.5.0",
     "fs": "^0.0.1-security",
     "helmet": "^7.0.0",
     "http-errors": "~1.6.3",
@@ -29,6 +30,7 @@
     "multer": "^1.4.5-lts.1",
     "nodemailer": "^6.9.2",
     "nodemon": "^2.0.22",
+    "otpless-node-js-auth-sdk": "^1.0.8",
     "razorpay": "^2.9.0",
     "unzip": "^0.1.11",
     "unzipper": "^0.10.14"
