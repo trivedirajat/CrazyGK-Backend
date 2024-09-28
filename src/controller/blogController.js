@@ -1,11 +1,15 @@
-var subjects = require("../models/subjects");
 const blogModal = require("../models/blogModal");
-var { ObjectId } = require("mongodb");
-const { s3UploadImage, uploadAndSaveImage } = require("../helper/helper");
+const {
+  uploadAndSaveImage,
+  isValidObjectId,
+  generateTOCFromHtml,
+} = require("../helper/helper");
+const { default: mongoose } = require("mongoose");
+const moment = require("moment");
 
-async function addBlog(req, res) {
+const addBlog = async (req, res) => {
   try {
-    const { blog_id, title } = req.body;
+    const { title, description, is_editorial } = req.body;
 
     if (!title || title.trim() === "") {
       return res
@@ -14,8 +18,6 @@ async function addBlog(req, res) {
     }
 
     let imageUrl = null;
-
-    // Handle image upload
     if (req.files && req.files.image) {
       const uploadResult = await uploadAndSaveImage(
         req,
@@ -28,126 +30,267 @@ async function addBlog(req, res) {
           .json({ status: 500, message: uploadResult.message });
       }
       imageUrl = uploadResult.imageUrl;
-      req.body.image = imageUrl;
     }
 
-    let msg;
-    let result;
+    // Check for existing blog
+    const existingBlog = await blogModal.findOne({ title });
+    if (existingBlog) {
+      return res
+        .status(400)
+        .json({ status: 400, message: "This blog already exists." });
+    }
+    const { toc, updatedHtml } = generateTOCFromHtml(description) || [];
+
+    // Create new blog
+    const result = await blogModal.create({
+      title,
+      description: updatedHtml || description,
+      toc: toc || [],
+      image: imageUrl,
+      is_editorial,
+    });
+
+    return res.status(201).json({
+      status: 201,
+      message: "Blog added successfully",
+      data: result,
+      imageUrl,
+    });
+  } catch (error) {
+    console.error("Error:", error.message);
+    return res
+      .status(500)
+      .json({ status: 500, message: "Internal Server Error" });
+  }
+};
+const editBlog = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const blog_id = id;
+    const { title, description, is_editorial } = req.body;
+
+    if (!title || title.trim() === "") {
+      return res
+        .status(400)
+        .json({ status: 400, message: "Title cannot be empty." });
+    }
+    const { toc, updatedHtml } = generateTOCFromHtml(description) || [];
+
+    let imageUrl = null;
+    if (req.files && req.files.image) {
+      const uploadResult = await uploadAndSaveImage(
+        req,
+        "image",
+        "public/assets/blogs"
+      );
+      if (!uploadResult.success) {
+        return res
+          .status(500)
+          .json({ status: 500, message: uploadResult.message });
+      }
+      imageUrl = uploadResult.imageUrl;
+    }
 
     // Update existing blog
-    if (blog_id) {
-      result = await blogModal.updateOne(
-        { _id: new ObjectId(blog_id) },
-        req.body
-      );
-      msg = "Update";
-    } else {
-      // Create new blog
-      result = await blogModal.create(req.body);
-      msg = "Add";
+    const result = await blogModal.updateOne(
+      { _id: new mongoose.Types.ObjectId(blog_id) },
+      {
+        title,
+        description: updatedHtml || description,
+        image: imageUrl || undefined,
+        is_editorial,
+        toc: toc || [],
+      },
+      { new: true }
+    );
+
+    if (!result.acknowledged) {
+      return res.status(404).json({ status: 404, message: "Blog not found." });
     }
 
-    // Check if operation succeeded
-    if (result) {
+    return res.status(200).json({
+      status: 200,
+      message: "Blog updated successfully",
+    });
+  } catch (error) {
+    console.error("Error:", error.message);
+    return res
+      .status(500)
+      .json({ status: 500, message: "Internal Server Error" });
+  }
+};
+
+async function getBlogs(req, res) {
+  try {
+    const { limit = 10, offset = 0, title = "", subject_id } = req.query;
+    const page = Math.max(0, Number(offset));
+    const perPage = Math.max(1, Number(limit));
+
+    let query = {};
+    if (title.trim()) {
+      query.title = { $regex: new RegExp(title, "i") };
+    }
+    if (subject_id && mongoose.isValidObjectId(subject_id)) {
+      query.subject_id = subject_id;
+    }
+
+    const result = await blogModal
+      .find(query)
+      .select({ description: 0, toc: 0 })
+      .skip(perPage * page)
+      .limit(perPage)
+      .sort({ createdDate: "desc" })
+      .exec();
+
+    const total = await blogModal.countDocuments(query);
+
+    if (result.length > 0) {
       return res.status(200).json({
         status: 200,
-        message: `${msg} Successfully`,
+        message: "Success",
         data: result,
-        imageUrl,
-        base_url: process.env.BASEURL,
+        total_data: total,
+        current_page: page,
+        per_page: perPage,
+        total_pages: Math.ceil(total / perPage),
       });
     } else {
-      return res.status(500).json({ status: 500, message: `${msg} Failed.` });
+      return res.status(404).json({
+        status: 404,
+        message: "No blogs found.",
+      });
     }
   } catch (error) {
-    console.log("error", error.message);
+    console.error("Error:", error.message);
     return res.status(500).json({
       status: 500,
       message: "Internal Server Error",
     });
   }
 }
-
-async function getBlogs(req, res) {
+async function geteditorial(req, res) {
   try {
-    // const user_id = req.user_id
-    // if(user_id === undefined || user_id === ''){
-    //     var responce = {
-    //         status: 403,
-    //         message: 'User not authorised.',
-    //     }
-    //     return res.status(403).send(responce);
-    // }
-    const { limit = 400, offset = 0, subject_id, search_title } = req.body;
+    const {
+      limit = 10,
+      offset = 0,
+      title = "",
+      subject_id,
+      date,
+      type,
+    } = req.query;
     const page = Math.max(0, Number(offset));
+    const perPage = Math.max(1, Number(limit));
 
-    let query = {};
-    if (subject_id != undefined && subject_id != "") {
-      query.subject_id = new ObjectId(subject_id);
+    let query = { is_editorial: true };
+    if (title.trim()) {
+      query.title = { $regex: new RegExp(title, "i") };
     }
-    if (search_title != undefined && search_title != "") {
-      query.title = { $regex: new RegExp(search_title, "ig") };
+    if (subject_id && mongoose.isValidObjectId(subject_id)) {
+      query.subject_id = subject_id;
     }
+    if (date && !moment(date, "YYYY-MM-DD", true).isValid()) {
+      return res.status(400).json({
+        message: "Invalid date format. Use YYYY-MM-DD format.",
+      });
+    }
+
+    if (type === "daily" && date) {
+      query.createdDate = {
+        $gte: moment(date, "YYYY-MM-DD").startOf("day").toDate(),
+        $lt: moment(date, "YYYY-MM-DD").endOf("day").toDate(),
+      };
+    }
+    console.log("🚀 ~ geteditorial ~ query:", query);
     const result = await blogModal
       .find(query)
-      .skip(Number(limit) * page)
-      .limit(Number(limit))
-      .sort({ _id: -1 })
+      .select({ description: 0 })
+      .skip(perPage * page)
+      .limit(perPage)
+      .sort({ createdDate: "desc" })
       .exec();
 
-    if (result.length > 0) {
-      const total = await blogModal.count(query);
+    const total = await blogModal.countDocuments(query);
 
-      var response = {
+    if (result.length > 0) {
+      return res.status(200).json({
         status: 200,
-        message: "Success.",
+        message: "Success",
         data: result,
         total_data: total,
-        base_url: process.env.BASEURL,
-      };
-      return res.status(200).send(response);
+        current_page: page,
+        per_page: perPage,
+        total_pages: Math.ceil(total / perPage),
+      });
     } else {
-      var response = {
-        status: 201,
-        message: "Failed.",
-      };
-      return res.status(201).send(response);
+      return res.status(404).json({
+        status: 404,
+        message: "No editorial found.",
+      });
     }
   } catch (error) {
-    console.log("error", error.message);
-    var responce = {
-      status: 501,
+    console.error("Error:", error.message);
+    return res.status(500).json({
+      status: 500,
       message: "Internal Server Error",
-    };
-    return res.status(501).send(responce);
+    });
   }
 }
 async function deleteBlog(req, res) {
-  try {
-    // const user_id = req.user_id
-    // if(user_id === undefined || user_id === ''){
-    //     var responce = {
-    //         status: 403,
-    //         message: 'User not authorised.',
-    //     }
-    //     return res.status(403).send(responce);
-    // }
-    const { blog_id } = req.body;
+  const { id } = req.params;
 
-    const result = await blogModal.deleteOne({ _id: new ObjectId(blog_id) });
-    var response = {
+  if (!isValidObjectId(id)) {
+    return res.status(400).json({ status: 400, message: "Invalid blog ID." });
+  }
+
+  try {
+    const deletedBlog = await blogModal.findByIdAndDelete(id);
+
+    if (!deletedBlog) {
+      return res.status(404).json({ status: 404, message: "Blog not found." });
+    }
+
+    return res.status(200).json({
       status: 200,
-      message: "Success.",
-    };
-    return res.status(200).send(response);
+      message: "Blog deleted successfully.",
+    });
   } catch (error) {
-    console.log("error", error.message);
-    var responce = {
-      status: 501,
-      message: "Internal Server Error",
-    };
-    return res.status(501).send(responce);
+    console.error("Error:", error.message);
+    return res
+      .status(500)
+      .json({ status: 500, message: "Internal Server Error" });
   }
 }
+async function getBlogById(req, res) {
+  try {
+    const { id } = req.params;
 
-module.exports = { addBlog, getBlogs, deleteBlog };
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({ status: 400, message: "Invalid blog ID." });
+    }
+
+    const blog = await blogModal.findById(id);
+
+    if (!blog) {
+      return res.status(404).json({ status: 404, message: "Blog not found." });
+    }
+
+    return res.status(200).json({
+      status: 200,
+      message: "Success",
+      data: blog,
+    });
+  } catch (error) {
+    console.error("Error:", error.message);
+    return res
+      .status(500)
+      .json({ status: 500, message: "Internal Server Error" });
+  }
+}
+module.exports = {
+  addBlog,
+  editBlog,
+  getBlogs,
+  deleteBlog,
+  getBlogById,
+  geteditorial,
+};

@@ -1,6 +1,8 @@
-const { s3UploadImage, uploadAndSaveImage } = require("../helper/helper");
-const path = require("path");
-const fs = require("fs");
+const {
+  s3UploadImage,
+  uploadAndSaveImage,
+  isValidObjectId,
+} = require("../helper/helper");
 const reviewModal = require("../models/reviewModal");
 var { ObjectId } = require("mongodb");
 
@@ -83,7 +85,6 @@ const createReview = async (req, res) => {
     const { name, review, rating } = req.body;
     let imageUrl = null;
 
-    // Check if there's an image to upload
     if (req.files && req.files.user_profile) {
       const uploadResult = await uploadAndSaveImage(
         req,
@@ -119,30 +120,65 @@ const createReview = async (req, res) => {
 };
 
 const getReviews = async (req, res) => {
-  const { page = 1, limit = 10 } = req.query;
-
   try {
+    const { limit = 10, offset = 0, name = "", rating = "" } = req.query;
+    const pageNum = Math.max(0, Number(offset) - 1);
+    const perPage = Math.max(1, Number(limit));
+
+    let query = {};
+
+    if (name.trim()) {
+      query.name = { $regex: new RegExp(name, "i") };
+    }
+
+    if (rating) {
+      query.rating = Number(rating);
+    }
+
     const reviews = await reviewModal
-      .find()
-      .skip((page - 1) * limit)
-      .limit(parseInt(limit))
+      .find(query)
+      .skip(perPage * pageNum)
+      .limit(perPage)
+      .sort({ createdDate: "desc" })
+      .populate({ path: "user_id", select: "name" })
       .exec();
 
-    const totalReviews = await reviewModal.countDocuments();
+    const totalReviews = await reviewModal.countDocuments(query); // Total filtered reviews
 
-    res.json({
-      reviews,
-      totalPages: Math.ceil(totalReviews / limit),
-      currentPage: parseInt(page),
+    if (reviews.length > 0) {
+      return res.status(200).json({
+        status: 200,
+        message: "Success",
+        data: reviews,
+        total_data: totalReviews,
+        current_page: pageNum + 1,
+        per_page: perPage,
+        total_pages: Math.ceil(totalReviews / perPage),
+      });
+    } else {
+      return res.status(404).json({
+        status: 404,
+        message: "No reviews found.",
+      });
+    }
+  } catch (error) {
+    console.error("Error:", error.message);
+    return res.status(500).json({
+      status: 500,
+      message: "Internal Server Error",
     });
-  } catch (err) {
-    res
-      .status(500)
-      .json({ message: "Error fetching reviews", error: err.message });
   }
 };
 const getReviewbyId = async (req, res) => {
-  const { review_id } = req.query;
+  const { id } = req.params;
+
+  if (!isValidObjectId(id)) {
+    return res.status(400).json({
+      status: 400,
+      message: "Invalid review ID.",
+    });
+  }
+  const review_id = id;
   try {
     const review = await reviewModal.findById(review_id);
     if (review) {

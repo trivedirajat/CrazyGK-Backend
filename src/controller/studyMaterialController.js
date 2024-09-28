@@ -1,80 +1,181 @@
+const { isValidObjectId, generateTOCFromHtml } = require("../helper/helper");
 const studyMaterialModal = require("../models/studyMaterialModal");
 const subjectTopics = require("../models/subjectTopics");
 var { ObjectId } = require("mongodb");
 
-async function addStudyMaterial(req, res) {
+// async function addStudyMaterial(req, res) {
+//   try {
+//     const user_id = req.user_id;
+//     // if(user_id != undefined || user_id != ''){
+//     //     var responce = {
+//     //         status: 403,
+//     //         message: 'User not authorised.',
+//     //     }
+//     //     return res.status(403).send(responce);
+//     // }
+//     const { title, description, subject_id, material_id } = req.body;
+//     if (title != "" && subject_id != "") {
+//       if (material_id != undefined && material_id != "") {
+//         var result = await studyMaterialModal.updateOne(
+//           { _id: material_id },
+//           req.body
+//         );
+//         if (result) {
+//           var results = await studyMaterialModal.find({ _id: material_id });
+//           var response = {
+//             status: 200,
+//             message: `Study material update Successfully`,
+//             data: results,
+//           };
+//           return res.status(200).send(response);
+//         } else {
+//           var response = {
+//             status: 201,
+//             message: `Study material update Failed.`,
+//           };
+//           return res.status(201).send(response);
+//         }
+//       } else {
+//         var chkPln = await studyMaterialModal.find({ title: title });
+//         if (chkPln.length > 0) {
+//           var response = {
+//             status: 201,
+//             message: `This study material already available.`,
+//           };
+//           return res.status(201).send(response);
+//         }
+//         var result = await studyMaterialModal.create(req.body);
+//         if (result) {
+//           var response = {
+//             status: 200,
+//             message: `Study material add Successfully.`,
+//             data: result,
+//           };
+//           return res.status(200).send(response);
+//         } else {
+//           var response = {
+//             status: 201,
+//             message: `Study material add Failed.`,
+//           };
+//           return res.status(201).send(response);
+//         }
+//       }
+//     } else {
+//       var response = {
+//         status: 201,
+//         message: "Can not be empty value.",
+//       };
+//       return res.status(201).send(response);
+//     }
+//   } catch (error) {
+//     console.log("error", error.message);
+//     var responce = {
+//       status: 501,
+//       message: "Internal Server Error",
+//     };
+//     return res.status(501).send(responce);
+//   }
+// }
+
+const addStudyMaterial = async (req, res) => {
   try {
-    const user_id = req.user_id;
-    // if(user_id != undefined || user_id != ''){
-    //     var responce = {
-    //         status: 403,
-    //         message: 'User not authorised.',
-    //     }
-    //     return res.status(403).send(responce);
-    // }
-    const { title, description, subject_id, material_id } = req.body;
-    if (title != "" && subject_id != "") {
-      if (material_id != undefined && material_id != "") {
-        var result = await studyMaterialModal.updateOne(
-          { _id: material_id },
-          req.body
-        );
-        if (result) {
-          var results = await studyMaterialModal.find({ _id: material_id });
-          var response = {
-            status: 200,
-            message: `Study material update Successfully`,
-            data: results,
-          };
-          return res.status(200).send(response);
-        } else {
-          var response = {
-            status: 201,
-            message: `Study material update Failed.`,
-          };
-          return res.status(201).send(response);
-        }
-      } else {
-        var chkPln = await studyMaterialModal.find({ title: title });
-        if (chkPln.length > 0) {
-          var response = {
-            status: 201,
-            message: `This study material already available.`,
-          };
-          return res.status(201).send(response);
-        }
-        var result = await studyMaterialModal.create(req.body);
-        if (result) {
-          var response = {
-            status: 200,
-            message: `Study material add Successfully.`,
-            data: result,
-          };
-          return res.status(200).send(response);
-        } else {
-          var response = {
-            status: 201,
-            message: `Study material add Failed.`,
-          };
-          return res.status(201).send(response);
-        }
-      }
-    } else {
-      var response = {
-        status: 201,
-        message: "Can not be empty value.",
-      };
-      return res.status(201).send(response);
+    const { topic_name, containt, subject_id, status } = req.body;
+    const { toc, updatedHtml } = generateTOCFromHtml(containt) || [];
+    if (!topic_name || !containt || !subject_id) {
+      return res
+        .status(400)
+        .json({ message: "Title, containt, and subject are required" });
     }
+
+    const newStudyMaterial = new studyMaterialModal({
+      topic_name,
+      containt: updatedHtml || containt,
+      subject_id,
+      toc: toc || [],
+      status: status !== undefined ? status : true,
+    });
+
+    // Save to database
+    await newStudyMaterial.save();
+
+    // Return success response
+    return res.status(201).json({
+      message: "Study material added successfully",
+      data: newStudyMaterial,
+    });
   } catch (error) {
-    console.log("error", error.message);
-    var responce = {
-      status: 501,
-      message: "Internal Server Error",
-    };
-    return res.status(501).send(responce);
+    // Handle errors and return error response
+    console.error("Error adding study material:", error);
+    return res
+      .status(500)
+      .json({ message: "An error occurred while adding study material" });
   }
-}
+};
+const editStudyMaterial = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { topic_name, containt, subject_id, status } = req.body;
+
+    if (!id) {
+      return res.status(400).json({ message: "Study material ID is required" });
+    }
+
+    if (!topic_name || !containt || !subject_id) {
+      return res
+        .status(400)
+        .json({ message: "Title, content, and subject are required" });
+    }
+
+    const studyMaterial = await studyMaterialModal.findById(id);
+
+    if (!studyMaterial) {
+      return res.status(404).json({ message: "Study material not found" });
+    }
+    const { toc, updatedHtml } = generateTOCFromHtml(containt) || [];
+    studyMaterial.topic_name = topic_name;
+    studyMaterial.containt = updatedHtml ?? containt;
+    studyMaterial.toc = toc ?? studyMaterial.toc;
+    studyMaterial.subject_id = subject_id;
+    studyMaterial.status = status !== undefined ? status : true;
+
+    const updatedStudyMaterial = await studyMaterial.save();
+
+    return res.status(200).json({
+      message: "Study material updated successfully",
+      data: updatedStudyMaterial,
+    });
+  } catch (error) {
+    console.error("Error updating study material:", error);
+    return res
+      .status(500)
+      .json({ message: "An error occurred while updating study material" });
+  }
+};
+const deleteStudyMaterial = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({ message: "Study material ID is required" });
+    }
+
+    const deletedStudyMaterial = await studyMaterialModal.findByIdAndDelete(id);
+
+    if (!deletedStudyMaterial) {
+      return res.status(404).json({ message: "Study material not found" });
+    }
+
+    return res.status(200).json({
+      message: "Study material deleted successfully",
+      data: deletedStudyMaterial,
+    });
+  } catch (error) {
+    console.error("Error deleting study material:", error);
+    return res
+      .status(500)
+      .json({ message: "An error occurred while deleting study material" });
+  }
+};
 
 async function getStudyMaterial(req, res) {
   try {
@@ -127,50 +228,6 @@ async function getStudyMaterial(req, res) {
       var response = {
         status: 201,
         message: "Failed.",
-      };
-      return res.status(201).send(response);
-    }
-  } catch (error) {
-    console.log("error", error.message);
-    var responce = {
-      status: 501,
-      message: "Internal Server Error",
-    };
-    return res.status(501).send(responce);
-  }
-}
-async function deleteStudyMaterial(req, res) {
-  try {
-    const user_id = req.user_id;
-    // if(user_id != undefined || user_id != ''){
-    //     var responce = {
-    //         status: 403,
-    //         message: 'User not authorised.',
-    //     }
-    //     return res.status(403).send(responce);
-    // }
-    const { stadymaterial_id } = req.body;
-    if (stadymaterial_id != undefined) {
-      const result = await studyMaterialModal.deleteOne({
-        _id: new ObjectId(stadymaterial_id),
-      });
-      if (result) {
-        var response = {
-          status: 200,
-          message: "Success.",
-        };
-        return res.status(200).send(response);
-      } else {
-        var response = {
-          status: 201,
-          message: "Failed.",
-        };
-        return res.status(201).send(response);
-      }
-    } else {
-      var response = {
-        status: 201,
-        message: "Can not be empty valuee.",
       };
       return res.status(201).send(response);
     }
@@ -374,18 +431,18 @@ async function getSubjectTopics(req, res) {
     return res.status(501).send(responce);
   }
 }
-async function getSubjectTopic(req, res) {
+async function getStudyById(req, res) {
   try {
-    const { study_id } = req.query;
-
-    if (!study_id) {
+    const { id } = req.params;
+    if (!isValidObjectId(id)) {
       return res.status(400).json({
         status: 400,
-        message: "Bad Request: 'study_id' query parameter is required.",
+        message: "Invalid study ID.",
       });
     }
+    const study_id = id;
 
-    const result = await subjectTopics.findById(study_id);
+    const result = await studyMaterialModal.findById(study_id);
 
     if (result) {
       return res.status(200).json({
@@ -408,6 +465,117 @@ async function getSubjectTopic(req, res) {
     });
   }
 }
+async function getstudyMaterialBySubjectId(req, res) {
+  try {
+    const { id } = req.params;
+    const { onlytopics } = req.query;
+
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({
+        status: 400,
+        message: "Invalid subject ID.",
+      });
+    }
+
+    const projection = onlytopics === "true" ? { topic_name: 1, _id: 1 } : {};
+
+    let query = studyMaterialModal
+      .find({ subject_id: new ObjectId(id) })
+      .select(projection);
+
+    if (onlytopics !== "true") {
+      query = query.populate("subject_id");
+    }
+
+    const result = await query.exec();
+
+    if (result && result.length > 0) {
+      return res.status(200).json({
+        status: 200,
+        message: "Success",
+        data: {
+          studyMaterials: result,
+          subjectDetails:
+            onlytopics !== "true" ? result[0]?.subject_id || {} : {},
+        },
+      });
+    } else {
+      return res.status(404).json({
+        status: 404,
+        message: "Not found",
+      });
+    }
+  } catch (error) {
+    return res.status(500).json({
+      status: 500,
+      message: "Internal Server Error",
+      error: error.message,
+    });
+  }
+}
+
+const getAllStudyMaterials = async (req, res) => {
+  try {
+    const {
+      limit = 10,
+      page = 1,
+      getactualcontent = false,
+      subject_id,
+      material_id,
+    } = req.query;
+
+    const perPage = Math.max(1, Number(limit));
+    const currentPage = Math.max(1, Number(page)) - 1;
+
+    let query = {};
+
+    if (subject_id) {
+      query.subject_id = subject_id;
+    }
+    if (material_id) {
+      query.material_id = material_id;
+    }
+
+    const projection = getactualcontent ? {} : { containt: 0 };
+
+    const studyMaterials = await studyMaterialModal
+      .find(query)
+      .select(projection)
+      .skip(perPage * currentPage)
+      .limit(perPage)
+      .sort({ createdDate: "asc" })
+      .populate({
+        path: "subject_id",
+        select: "_id subject_name",
+      })
+      .exec();
+
+    const totalMaterials = await studyMaterialModal.countDocuments(query);
+
+    if (studyMaterials.length > 0) {
+      return res.status(200).json({
+        success: true,
+        message: "Study materials fetched successfully",
+        data: studyMaterials,
+        total_data: totalMaterials,
+        current_page: currentPage + 1,
+        per_page: perPage,
+        total_pages: Math.ceil(totalMaterials / perPage),
+      });
+    } else {
+      return res.status(404).json({
+        success: false,
+        message: "No study materials found",
+      });
+    }
+  } catch (error) {
+    console.error("Error fetching study materials:", error.message);
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+    });
+  }
+};
 
 async function deleteSubjectTopics(req, res) {
   try {
@@ -461,5 +629,8 @@ module.exports = {
   getSubjectTopics,
   editSubjectTopics,
   deleteSubjectTopics,
-  getSubjectTopic,
+  getStudyById,
+  getAllStudyMaterials,
+  editStudyMaterial,
+  getstudyMaterialBySubjectId,
 };

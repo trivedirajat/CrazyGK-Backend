@@ -1,7 +1,5 @@
-var subjects = require("../models/subjects");
-var { ObjectId } = require("mongodb");
-const { s3UploadImage, fileRemovePath } = require("../helper/helper");
-const path = require("path");
+const subjects = require("../models/subjects");
+const { ObjectId } = require("mongodb");
 const { uploadAndSaveImage } = require("../helper/helper");
 
 async function addSubjects(req, res) {
@@ -69,81 +67,176 @@ async function addSubjects(req, res) {
       .json({ status: 500, message: "Internal Server Error" });
   }
 }
+async function editSubject(req, res) {
+  try {
+    const { id } = req.params;
+    const subject_id = id;
+
+    if (!subject_id) {
+      return res
+        .status(400)
+        .json({ status: 400, message: "Subject ID is required." });
+    }
+
+    let imageUrl = null;
+    if (req.files && req.files.image) {
+      const uploadResult = await uploadAndSaveImage(
+        req,
+        "image",
+        "public/assets/subjects"
+      );
+      if (!uploadResult.success) {
+        return res
+          .status(500)
+          .json({ status: 500, message: uploadResult.message });
+      }
+      imageUrl = uploadResult.imageUrl;
+      req.body.image = imageUrl;
+    }
+
+    const updatedSubject = await subjects.updateOne(
+      { _id: new ObjectId(subject_id) },
+      req.body,
+      { new: true }
+    );
+
+    if (updatedSubject.nModified === 0) {
+      return res.status(404).json({
+        status: 404,
+        message: "Subject not found or no changes made.",
+      });
+    }
+
+    return res.status(200).json({
+      status: 200,
+      message: "Subject updated successfully",
+    });
+  } catch (error) {
+    console.log("error", error.message);
+    return res
+      .status(500)
+      .json({ status: 500, message: "Internal Server Error" });
+  }
+}
+
 async function getSubjects(req, res) {
   try {
-    const user_id = req.user_id;
-    // if(user_id != undefined || user_id != ''){
-    //     var responce = {
-    //         status: 403,
-    //         message: 'User not authorised.',
-    //     }
-    //     return res.status(403).send(responce);
-    // }
-    const { limit = 400, offset = 0, subject_name, subject_id } = req.body;
+    const { limit = 10, offset = 0, subject_name = "", subject_id } = req.query;
     const page = Math.max(0, Number(offset));
+    const perPage = Math.max(1, Number(limit));
 
     let query = {};
-    if (subject_name != undefined && subject_name != "") {
+    if (subject_name.trim()) {
       query.subject_name = { $regex: new RegExp(subject_name, "ig") };
     }
-    if (subject_id != undefined && subject_id != "") {
+    if (subject_id) {
       query._id = subject_id;
     }
 
     const result = await subjects
       .find(query)
-      .skip(Number(limit) * page)
-      .limit(Number(limit))
+      .skip(perPage * page)
+      .limit(perPage)
       .sort({ subject_name: "asc" })
       .exec();
-    if (result.length > 0) {
-      const total = await subjects.count(query);
 
-      var response = {
+    const total = await subjects.countDocuments(query);
+
+    if (result.length > 0) {
+      return res.status(200).json({
         status: 200,
-        message: "Success.",
+        message: "Success",
         data: result,
         total_data: total,
-        base_url: process.env.BASEURL,
-      };
-      return res.status(200).send(response);
+        current_page: page,
+        per_page: perPage,
+        total_pages: Math.ceil(total / perPage),
+      });
     } else {
-      var response = {
-        status: 201,
-        message: "Failed.",
-      };
-      return res.status(201).send(response);
+      return res.status(404).json({
+        status: 404,
+        message: "No subjects found.",
+      });
     }
   } catch (error) {
-    console.log("error", error.message);
-    var responce = {
-      status: 501,
+    console.error("Error:", error.message);
+    return res.status(500).json({
+      status: 500,
       message: "Internal Server Error",
-    };
-    return res.status(501).send(responce);
+    });
+  }
+}
+async function getSubjectById(req, res) {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res
+        .status(400)
+        .json({ status: 400, message: "Subject ID is required." });
+    }
+    const subject_id = id;
+    const result = await subjects.findOne({ _id: new ObjectId(subject_id) });
+    if (result) {
+      return res.status(200).json({
+        status: 200,
+        message: "Success",
+        data: result,
+      });
+    } else {
+      return res.status(404).json({
+        status: 404,
+        message: "Subject not found.",
+      });
+    }
+  } catch (error) {
+    console.error("Error:", error.message);
+    return res.status(500).json({
+      status: 500,
+      message: "Internal Server Error",
+    });
+  }
+}
+async function getallsubjectname(req, res) {
+  try {
+    const result = await subjects.find({}).select({ subject_name: 1 });
+    return res.status(200).json({
+      status: 200,
+      message: "Success",
+      data: result,
+    });
+  } catch (error) {
+    console.error("Error:", error.message);
+    return res.status(500).json({
+      status: 500,
+      message: "Internal Server Error",
+    });
   }
 }
 async function deleteSubjects(req, res) {
   try {
-    const user_id = req.user_id;
-    // if(user_id != undefined || user_id != ''){
-    //     var responce = {
-    //         status: 403,
-    //         message: 'User not authorised.',
-    //     }
-    //     return res.status(403).send(responce);
-    // }
-    const { subject_id } = req.body;
-
+    const { id } = req.params;
+    if (!id) {
+      return res
+        .status(400)
+        .json({ status: 400, message: "Subject ID is required." });
+    }
+    const subject_id = id;
     const result = await subjects.deleteOne({ _id: new ObjectId(subject_id) });
-    var response = {
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({
+        status: 404,
+        message: "Subject not found or no changes made.",
+      });
+    }
+    const response = {
       status: 200,
       message: "Success.",
     };
     return res.status(200).send(response);
   } catch (error) {
     console.log("error", error.message);
-    var responce = {
+    const responce = {
       status: 501,
       message: "Internal Server Error",
     };
@@ -151,4 +244,11 @@ async function deleteSubjects(req, res) {
   }
 }
 
-module.exports = { addSubjects, getSubjects, deleteSubjects };
+module.exports = {
+  addSubjects,
+  getSubjects,
+  deleteSubjects,
+  editSubject,
+  getSubjectById,
+  getallsubjectname,
+};

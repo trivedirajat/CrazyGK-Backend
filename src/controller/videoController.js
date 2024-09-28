@@ -1,224 +1,209 @@
-var plan = require("../models/plan");
+const { isValidObjectId } = require("../helper/helper");
 const videoModal = require("../models/videoModal");
-const video = require("../models/videoModal");
-var { ObjectId } = require("mongodb");
+
 
 async function addVideo(req, res) {
-  try {
-    const user_id = req.user_id;
-    // if(user_id != undefined || user_id != ''){
-    //     var responce = {
-    //         status: 403,
-    //         message: 'User not authorised.',
-    //     }
-    //     return res.status(403).send(responce);
-    // }
+  const { title, description, subject_id, video_url, status, is_trending } =
+    req.body;
 
-    const { title, description, video_url, video_id, is_trending, subject_id } =
-      req.body;
-    if (title != "" && video_url != "" && subject_id != "") {
-      if (video_id != undefined && video_id != "") {
-        var result = await videoModal.updateOne(
-          { _id: new ObjectId(video_id) },
-          req.body
-        );
-        if (result) {
-          var results = await videoModal.find({ _id: new ObjectId(video_id) });
-          var response = {
-            status: 200,
-            message: `Video update Successfully`,
-            data: results,
-          };
-          return res.status(200).send(response);
-        } else {
-          var response = {
-            status: 201,
-            message: `Video update Failed.`,
-          };
-          return res.status(201).send(response);
-        }
-      } else {
-        var chkPln = await videoModal.find({ title: title });
-        if (chkPln.length > 0) {
-          var response = {
-            status: 201,
-            message: `This video already available.`,
-          };
-          return res.status(201).send(response);
-        }
-        var result = await videoModal.create(req.body);
-        if (result) {
-          var response = {
-            status: 200,
-            message: `Video add Successfully.`,
-            data: result,
-          };
-          return res.status(200).send(response);
-        } else {
-          var response = {
-            status: 201,
-            message: `Video add Failed.`,
-          };
-          return res.status(201).send(response);
-        }
-      }
-    } else {
-      var response = {
-        status: 201,
-        message: "Can not be empty value.",
-      };
-      return res.status(201).send(response);
-    }
+  // Validate required fields
+  if (!title || !video_url || !subject_id) {
+    return res.status(400).json({
+      status: 400,
+      message: "Title, subject_id, and video_url are required fields.",
+    });
+  }
+
+  try {
+    const newVideo = new videoModal({
+      title,
+      description: description || [],
+      subject_id,
+      video_url,
+      status,
+      is_trending,
+    });
+
+    const savedVideo = await newVideo.save();
+    return res.status(201).json({
+      status: 201,
+      message: "Video added successfully",
+      data: savedVideo,
+    });
   } catch (error) {
-    console.log("error", error.message);
-    var responce = {
-      status: 501,
+    console.error("Error:", error.message);
+    return res.status(500).json({
+      status: 500,
       message: "Internal Server Error",
-    };
-    return res.status(501).send(responce);
+    });
   }
 }
-// async function getvideo(req, res) {
-//     try {
-//         const user_id = req.user_id
-//         // if(user_id != undefined || user_id != ''){
-//         //     var responce = {
-//         //         status: 403,
-//         //         message: 'User not authorised.',
-//         //     }
-//         //     return res.status(403).send(responce);
-//         // }
-//         const { limit = 30, offset = 0, subject_id, is_trending, search_title} = req.body;
-//         const page = Math.max(0, Number(offset));
-//         let query = {}
-//         if(subject_id != undefined && subject_id!= ''){
-//             query.subject_id = new ObjectId(subject_id)
-//         }
-//         if (search_title != undefined && search_title != '') {
-//             query.title = { $regex: new RegExp(search_title, "ig") }
-//         }
-//         if(is_trending != undefined && is_trending!= ''){
-//             query.is_trending = is_trending == 'true' ? true:false
-//         }
-//         const result = await videoModal.aggregate([
-//             {$match : query},
-//             {
-//                 $lookup: {
-//                     from: "subjects",
-//                     localField: "subject_id",
-//                     foreignField: "_id",
-//                     as: "subjects",
-//                 }
-//              },
-//              {$unwind:'$subjects'},
-//              {
-//                 $project: {
-//                     _id: 1,
-//                     title: 1,
-//                     description: 1,
-//                     video_url: 1,
-//                     status: 1,
-//                     createdDate:1,
-//                     is_trending:1,
-//                     subject_id: 1,
-//                     subject_name: "$subjects.subject_name"
-//                 }
-//              }
-//         ]).skip(Number(limit) * page).limit(Number(limit)).sort({ '_id': -1 }).exec();
 
-//         if (result.length > 0) {
-//             const total = await videoModal.count(query);
-
-//             var response = {
-//                 status: 200,
-//                 message: 'Success.',
-//                 data: result,
-//                 total_data: total,
-//             }
-//             return res.status(200).send(response);
-//         } else {
-//             var response = {
-//                 status: 201,
-//                 message: 'Failed.',
-//             }
-//             return res.status(201).send(response);
-//         }
-//     } catch (error) {
-//         console.log("error", error.message);
-//         var responce = {
-//             status: 501,
-//             message: "Internal Server Error",
-//         };
-//         return res.status(501).send(responce);
-//     }
-
-// }
-const getvideo = async (req, res) => {
+async function getvideo(req, res) {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
+    const { limit = 10, offset = 0, title = "", subject_id } = req.query;
+    const page = Math.max(0, Number(offset));
+    const perPage = Math.max(1, Number(limit));
 
-    const skip = (page - 1) * limit;
+    let query = {};
+    if (title.trim()) {
+      query.title = { $regex: new RegExp(title, "i") };
+    }
+    if (subject_id && isValidObjectId(subject_id)) {
+      query.subject_id = subject_id;
+    }
 
-    const trendingVideos = await videoModal
-      .find({ is_trending: true })
-      .skip(skip)
-      .limit(limit);
+    const result = await videoModal
+      .find(query)
+      .select({ description: 0 })
+      .skip(perPage * page)
+      .limit(perPage)
+      .sort({ createdDate: "desc" })
+      .populate({
+        path: "subject_id",
+        select: "_id subject_name",
+      })
+      .exec();
 
+    const total = await videoModal.countDocuments(query);
     const totalTrendingVideos = await videoModal.countDocuments({
       is_trending: true,
     });
-
-    const totalPages = Math.ceil(totalTrendingVideos / limit);
-
-    return res.status(200).json({
-      page,
-      limit,
-      totalPages,
-      totalTrendingVideos,
-      data: trendingVideos,
-    });
-  } catch (error) {
-    return res
-      .status(500)
-      .json({ error: "Server error", details: error.message });
-  }
-};
-async function videoDelete(req, res) {
-  try {
-    const user_id = req.user_id;
-    // if(user_id != undefined || user_id != ''){
-    //     var responce = {
-    //         status: 403,
-    //         message: 'User not authorised.',
-    //     }
-    //     return res.status(403).send(responce);
-    // }
-    const { video_id } = req.body;
-    if (video_id != "") {
-      const result = await videoModal.deleteOne({
-        _id: new ObjectId(video_id),
-      });
-      var response = {
+    if (result.length > 0) {
+      return res.status(200).json({
         status: 200,
-        message: "Success.",
-      };
-      return res.status(200).send(response);
+        message: "Success",
+        data: result,
+        total_data: total,
+        current_page: page,
+        per_page: perPage,
+        total_pages: Math.ceil(total / perPage),
+        totalTrendingVideos,
+      });
     } else {
-      var response = {
-        status: 201,
-        message: "Can not be empty value.",
-      };
-      return res.status(201).send(response);
+      return res.status(404).json({
+        status: 404,
+        message: "No videos found.",
+      });
     }
   } catch (error) {
-    console.log("error", error.message);
-    var responce = {
-      status: 501,
+    console.error("Error:", error.message);
+    return res.status(500).json({
+      status: 500,
       message: "Internal Server Error",
-    };
-    return res.status(501).send(responce);
+    });
+  }
+}
+async function getVideoById(req, res) {
+  const { id } = req.params;
+
+  if (!isValidObjectId(id)) {
+    return res.status(400).json({
+      status: 400,
+      message: "Invalid video ID.",
+    });
+  }
+
+  try {
+    const video = await videoModal.findById(id);
+
+    if (!video) {
+      return res.status(404).json({
+        status: 404,
+        message: "Video not found",
+      });
+    }
+
+    return res.status(200).json({
+      status: 200,
+      message: "Success",
+      data: video,
+    });
+  } catch (error) {
+    console.error("Error:", error.message);
+    return res.status(500).json({
+      status: 500,
+      message: "Internal Server Error",
+    });
+  }
+}
+async function editVideo(req, res) {
+  const { id } = req.params;
+  const { title, description, subject_id, video_url, status, is_trending } =
+    req.body;
+
+  if (!isValidObjectId(id)) {
+    return res.status(400).json({
+      status: 400,
+      message: "Invalid video ID.",
+    });
+  }
+
+  try {
+    const updatedVideo = await videoModal.findByIdAndUpdate(
+      id,
+      {
+        title,
+        description: description || [],
+        subject_id,
+        video_url,
+        status,
+        is_trending,
+      },
+      { new: true }
+    );
+
+    if (!updatedVideo) {
+      return res.status(404).json({
+        status: 404,
+        message: "Video not found",
+      });
+    }
+
+    return res.status(200).json({
+      status: 200,
+      message: "Video updated successfully",
+      data: updatedVideo,
+    });
+  } catch (error) {
+    console.error("Error:", error.message);
+    return res.status(500).json({
+      status: 500,
+      message: "Internal Server Error",
+    });
+  }
+}
+async function videoDelete(req, res) {
+  const { id } = req.params;
+
+  if (!isValidObjectId(id)) {
+    return res.status(400).json({
+      status: 400,
+      message: "Invalid video ID.",
+    });
+  }
+
+  try {
+    const deletedVideo = await videoModal.findByIdAndDelete(id);
+
+    if (!deletedVideo) {
+      return res.status(404).json({
+        status: 404,
+        message: "Video not found",
+      });
+    }
+
+    return res.status(200).json({
+      status: 200,
+      message: "Video deleted successfully",
+    });
+  } catch (error) {
+    console.error("Error:", error.message);
+    return res.status(500).json({
+      status: 500,
+      message: "Internal Server Error",
+    });
   }
 }
 
-module.exports = { addVideo, getvideo, videoDelete };
+module.exports = { addVideo, getvideo, videoDelete, getVideoById, editVideo };

@@ -3,6 +3,7 @@ const bcrypt = require("bcrypt");
 const fs = require("fs");
 const path = require("path");
 const AWS = require("aws-sdk");
+const cheerio = require("cheerio");
 const saltRounds = 10;
 const { ObjectId } = require("mongodb");
 
@@ -177,7 +178,12 @@ const s3UploadImage = async (localFilePath, bucketFilePath) => {
     }
   });
 };
-const uploadAndSaveImage = async (req, fileFieldName, folderPath) => {
+const uploadAndSaveImage = async (
+  req,
+  fileFieldName,
+  folderPath,
+  oldImagePath = null
+) => {
   try {
     const imageFile =
       req.files && req.files[fileFieldName]
@@ -194,33 +200,105 @@ const uploadAndSaveImage = async (req, fileFieldName, folderPath) => {
 
     const bucketFilePath = `${fileFieldName}/${imageFile.filename}`;
 
+    let imageUrl;
+    let isS3Upload = false;
+
     try {
+      // Try uploading to S3
       const s3Result = await s3UploadImage(localFilePath, bucketFilePath);
       if (s3Result) {
+        isS3Upload = true; // Mark that the upload was successful to S3
+        imageUrl = s3Result.Location;
+
+        // Delete local file after successful S3 upload
         fs.unlink(localFilePath, (err) => {
           if (err)
             console.log(`Failed to delete local file: ${localFilePath}`, err);
         });
-        return { success: true, imageUrl: s3Result.Location };
       }
+      imageUrl = `${process.env.SITEURL}/${folderPath}/${imageFile.filename}`;
     } catch (s3Error) {
-      console.log("S3 upload failed:", s3Error);
+      console.log("S3 upload failed, saving locally:", s3Error);
+    }
+
+    if (oldImagePath) {
+      try {
+        if (oldImagePath.includes("s3.amazonaws.com")) {
+          // await deleteOldImageFromS3(oldImagePath);
+        } else {
+          // Otherwise, delete it from local storage
+          const oldLocalFilePath = path.join(
+            folderPath,
+            path.basename(oldImagePath)
+          );
+          fs.unlink(oldLocalFilePath, (err) => {
+            if (err)
+              console.log(
+                `Failed to delete old local image: ${oldLocalFilePath}`,
+                err
+              );
+          });
+        }
+      } catch (deleteError) {
+        console.log("Failed to delete old image:", deleteError);
+      }
     }
 
     return {
       success: true,
-      imageUrl: `${process.env.SITEURL}/${folderPath}/${imageFile.filename}`,
+      imageUrl,
+      isS3Upload,
     };
   } catch (error) {
     console.error("Image upload failed:", error.message);
     return { success: false, message: "Internal server error" };
   }
 };
+
+// const uploadAndSaveImage = async (req, fileFieldName, folderPath) => {
+//   try {
+//     const imageFile =
+//       req.files && req.files[fileFieldName]
+//         ? req.files[fileFieldName][0]
+//         : null;
+
+//     if (!imageFile) {
+//       return { success: false, message: "No image file provided" };
+//     }
+
+//     // Save image locally
+//     const localFilePath = path.join(folderPath, imageFile.filename);
+//     req.body.image = imageFile.filename;
+
+//     const bucketFilePath = `${fileFieldName}/${imageFile.filename}`;
+
+//     try {
+//       const s3Result = await s3UploadImage(localFilePath, bucketFilePath);
+//       if (s3Result) {
+//         fs.unlink(localFilePath, (err) => {
+//           if (err)
+//             console.log(`Failed to delete local file: ${localFilePath}`, err);
+//         });
+//         return { success: true, imageUrl: s3Result.Location };
+//       }
+//     } catch (s3Error) {
+//       console.log("S3 upload failed:", s3Error);
+//     }
+
+//     return {
+//       success: true,
+//       imageUrl: `${process.env.SITEURL}/${folderPath}/${imageFile.filename}`,
+//     };
+//   } catch (error) {
+//     console.error("Image upload failed:", error.message);
+//     return { success: false, message: "Internal server error" };
+//   }
+// };
 const generateAccessToken = (user) => {
   return jwt.sign(
     { _id: user._id, user_type: user.user_type },
     process.env.JWT_ACCESS_SECRET,
-    { expiresIn: "1m" }
+    { expiresIn: "15m" }
   );
 };
 
@@ -261,6 +339,32 @@ const isUser = (req, res, next) => {
   }
   next();
 };
+
+function generateTOCFromHtml(htmlContent) {
+  if (!htmlContent || typeof htmlContent !== "string") {
+    return { toc: [], updatedHtml: htmlContent };
+  }
+
+  const $ = cheerio.load(htmlContent);
+  const headings = $("h1, h2, h3, h4, h5");
+
+  const toc = [];
+  headings.each((index, element) => {
+    const level = element.tagName.toLowerCase();
+    const text = $(element).text();
+    const id = text.toLowerCase().replace(/\s+/g, "-");
+    $(element).attr("id", id);
+
+    toc.push({ text, id, level });
+  });
+
+  const updatedHtml = $.html();
+  return { toc, updatedHtml };
+}
+const isValidMobileNumber = (mobile) => {
+  const mobileNumber = Number(mobile);
+  return !isNaN(mobileNumber) && mobileNumber.toString().length === 10;
+};
 module.exports = {
   jwtToken,
   hashPassword,
@@ -279,4 +383,6 @@ module.exports = {
   isUser,
   isValidObjectId,
   filterValidIds,
+  generateTOCFromHtml,
+  isValidMobileNumber
 };
