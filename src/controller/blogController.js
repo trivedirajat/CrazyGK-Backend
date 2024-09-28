@@ -1,11 +1,15 @@
 const blogModal = require("../models/blogModal");
-var { ObjectId } = require("mongodb");
-const { uploadAndSaveImage, isValidObjectId } = require("../helper/helper");
+const {
+  uploadAndSaveImage,
+  isValidObjectId,
+  generateTOCFromHtml,
+} = require("../helper/helper");
 const { default: mongoose } = require("mongoose");
+const moment = require("moment");
 
 const addBlog = async (req, res) => {
   try {
-    const { title, description } = req.body;
+    const { title, description, is_editorial } = req.body;
 
     if (!title || title.trim() === "") {
       return res
@@ -35,12 +39,15 @@ const addBlog = async (req, res) => {
         .status(400)
         .json({ status: 400, message: "This blog already exists." });
     }
+    const { toc, updatedHtml } = generateTOCFromHtml(description) || [];
 
     // Create new blog
     const result = await blogModal.create({
       title,
-      description,
+      description: updatedHtml || description,
+      toc: toc || [],
       image: imageUrl,
+      is_editorial,
     });
 
     return res.status(201).json({
@@ -60,13 +67,14 @@ const editBlog = async (req, res) => {
   try {
     const { id } = req.params;
     const blog_id = id;
-    const { title, description } = req.body;
+    const { title, description, is_editorial } = req.body;
 
     if (!title || title.trim() === "") {
       return res
         .status(400)
         .json({ status: 400, message: "Title cannot be empty." });
     }
+    const { toc, updatedHtml } = generateTOCFromHtml(description) || [];
 
     let imageUrl = null;
     if (req.files && req.files.image) {
@@ -86,7 +94,13 @@ const editBlog = async (req, res) => {
     // Update existing blog
     const result = await blogModal.updateOne(
       { _id: new mongoose.Types.ObjectId(blog_id) },
-      { title, description, image: imageUrl || undefined },
+      {
+        title,
+        description: updatedHtml || description,
+        image: imageUrl || undefined,
+        is_editorial,
+        toc: toc || [],
+      },
       { new: true }
     );
 
@@ -122,6 +136,7 @@ async function getBlogs(req, res) {
 
     const result = await blogModal
       .find(query)
+      .select({ description: 0, toc: 0 })
       .skip(perPage * page)
       .limit(perPage)
       .sort({ createdDate: "desc" })
@@ -143,6 +158,73 @@ async function getBlogs(req, res) {
       return res.status(404).json({
         status: 404,
         message: "No blogs found.",
+      });
+    }
+  } catch (error) {
+    console.error("Error:", error.message);
+    return res.status(500).json({
+      status: 500,
+      message: "Internal Server Error",
+    });
+  }
+}
+async function geteditorial(req, res) {
+  try {
+    const {
+      limit = 10,
+      offset = 0,
+      title = "",
+      subject_id,
+      date,
+      type,
+    } = req.query;
+    const page = Math.max(0, Number(offset));
+    const perPage = Math.max(1, Number(limit));
+
+    let query = { is_editorial: true };
+    if (title.trim()) {
+      query.title = { $regex: new RegExp(title, "i") };
+    }
+    if (subject_id && mongoose.isValidObjectId(subject_id)) {
+      query.subject_id = subject_id;
+    }
+    if (date && !moment(date, "YYYY-MM-DD", true).isValid()) {
+      return res.status(400).json({
+        message: "Invalid date format. Use YYYY-MM-DD format.",
+      });
+    }
+
+    if (type === "daily" && date) {
+      query.createdDate = {
+        $gte: moment(date, "YYYY-MM-DD").startOf("day").toDate(),
+        $lt: moment(date, "YYYY-MM-DD").endOf("day").toDate(),
+      };
+    }
+    console.log("🚀 ~ geteditorial ~ query:", query);
+    const result = await blogModal
+      .find(query)
+      .select({ description: 0 })
+      .skip(perPage * page)
+      .limit(perPage)
+      .sort({ createdDate: "desc" })
+      .exec();
+
+    const total = await blogModal.countDocuments(query);
+
+    if (result.length > 0) {
+      return res.status(200).json({
+        status: 200,
+        message: "Success",
+        data: result,
+        total_data: total,
+        current_page: page,
+        per_page: perPage,
+        total_pages: Math.ceil(total / perPage),
+      });
+    } else {
+      return res.status(404).json({
+        status: 404,
+        message: "No editorial found.",
       });
     }
   } catch (error) {
@@ -204,4 +286,11 @@ async function getBlogById(req, res) {
       .json({ status: 500, message: "Internal Server Error" });
   }
 }
-module.exports = { addBlog, editBlog, getBlogs, deleteBlog, getBlogById };
+module.exports = {
+  addBlog,
+  editBlog,
+  getBlogs,
+  deleteBlog,
+  getBlogById,
+  geteditorial,
+};

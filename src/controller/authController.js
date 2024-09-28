@@ -2,17 +2,19 @@ const user = require("../models/user");
 const {
   hashPassword,
   comparePassword,
-  s3UploadImage,
   generateAccessToken,
   verifyRefreshToken,
+  uploadAndSaveImage,
+  isValidMobileNumber,
 } = require("../helper/helper");
-const sendemails = require("../helper/mailSend");
-// const FirebaseAdmin = require("../helper/FirebaseAdmin");
-const { jwtToken } = require("../helper/helper");
-const { isNumber } = require("razorpay/dist/utils/razorpay-utils");
+const FirebaseAdmin = require("../helper/FirebaseAdmin");
 const { ObjectId } = require("mongodb");
-const OTP = require("../models/OtpModal");
-const { UserDetail } = require("otpless-node-js-auth-sdk");
+const {
+  sendOTP,
+  generateOrderId,
+  resendOTP,
+  verifyOTP,
+} = require("../helper/otpless");
 const isValidNumber = (str) => !isNaN(str) && !isNaN(parseFloat(str));
 exports.verifyUser = async (req, res) => {
   const { id } = req.params;
@@ -168,23 +170,23 @@ exports.signup = async (req, res) => {
         message: "This mobile number or email is already registered.",
       });
     }
-
-    const otp = generateOtp();
-
-    const otpEntry = new OTP({
-      otp,
-      mobile: mobile || null,
-      email: email || null,
-      expiresAt: new Date(Date.now() + 20 * 60 * 1000), // OTP valid for 20 minutes
+    const OTPID = generateOrderId();
+    const OtpRes = await sendOTP({
+      phoneNumber: `91${mobile}`,
+      orderId: OTPID,
     });
+    console.log(`OTP for ${mobile || email}: ${OtpRes.orderId}`);
+    if (OtpRes.orderId) {
+      return res.status(201).send({
+        status: 201,
+        message: "OTP sent successfully",
+        OTPID: OtpRes.orderId,
+      });
+    }
 
-    await otpEntry.save();
-
-    console.log(`OTP for ${mobile || email}: ${otp}`);
-
-    return res.status(201).send({
-      status: 201,
-      message: "OTP sent successfully",
+    return res.status(404).send({
+      status: 404,
+      message: "OTP sending failed",
     });
   } catch (error) {
     console.error("Error:", error.message);
@@ -195,16 +197,10 @@ exports.signup = async (req, res) => {
   }
 };
 
-// Function to generate a new OTP
-const generateOtp = () => {
-  // Implement your OTP generation logic here
-  return 111111; // Replace with actual OTP generation logic
-};
-
 // Resend OTP Controller
 exports.resentOtp = async (req, res) => {
   try {
-    const { mobile, email } = req.body;
+    const { mobile, email, OTPID } = req.body;
 
     if (!mobile && !email) {
       return res.status(400).send({
@@ -217,30 +213,21 @@ exports.resentOtp = async (req, res) => {
     if (mobile) query.mobile = mobile;
     if (email) query.email = email;
 
-    const otp = generateOtp();
-
-    const existingOtp = await OTP.findOne(query).exec();
-
-    if (existingOtp) {
-      existingOtp.otp = otp;
-      existingOtp.expiresAt = new Date(Date.now() + 20 * 60 * 1000); // OTP valid for 20 minutes
-      await existingOtp.save();
-    } else {
-      // Create new OTP record
-      const otpEntry = new OTP({
-        otp,
-        mobile: mobile || null,
-        email: email || null,
-        expiresAt: new Date(Date.now() + 20 * 60 * 1000), // OTP valid for 20 minutes
+    const { errorMessage, orderId } = await resendOTP({
+      orderId: OTPID,
+    });
+    console.log(`OTP for ${mobile || email}: ${orderId}`);
+    console.log("🚀 ~ exports.resentOtp= ~ success:", orderId);
+    if (orderId) {
+      return res.status(200).send({
+        status: 200,
+        message: "OTP  sent successfully",
       });
-      await otpEntry.save();
     }
-
-    console.log(`OTP for ${mobile || email}: ${otp}`);
-
-    return res.status(200).send({
-      status: 200,
-      message: "OTP  sent successfully",
+    return res.status(400).send({
+      status: 400,
+      message: "OTP sending failed. You can resend up to 3 times.",
+      error: errorMessage,
     });
   } catch (error) {
     console.error("Error:", error.message);
@@ -252,7 +239,7 @@ exports.resentOtp = async (req, res) => {
 };
 
 exports.verifyOTPAndSignup = async (req, res) => {
-  const { otp, user_type = "user", data } = req.body;
+  const { otp, user_type = "user", data, OTPID } = req.body;
   const { mobile, email } = data;
   if (!otp || (!mobile && !email)) {
     return res.status(400).send({
@@ -267,11 +254,17 @@ exports.verifyOTPAndSignup = async (req, res) => {
     if (email) query.email = email;
 
     // Check OTP validity
-    const otpEntry = await OTP.findOne(query).exec();
-    if (!otpEntry || otpEntry.otp !== otp || otpEntry.expiresAt < Date.now()) {
+    const { isOTPVerified: otpResponse, reason } = await verifyOTP({
+      phoneNumber: `91${mobile}`,
+      orderId: OTPID,
+      otp,
+    });
+    console.log("🚀 ~ exports.verifyOTPAndSignup= ~ otpResponse:", otpResponse);
+    if (!otpResponse) {
       return res.status(400).send({
         status: 400,
         message: "Invalid or expired OTP.",
+        error: reason,
       });
     }
 
@@ -287,9 +280,6 @@ exports.verifyOTPAndSignup = async (req, res) => {
     // Save new user
     await newUser.save();
 
-    // Delete OTP entry after successful user creation
-    await OTP.findOneAndDelete(query).exec();
-
     return res.status(201).send({
       status: 201,
       message: "User successfully created.",
@@ -304,161 +294,21 @@ exports.verifyOTPAndSignup = async (req, res) => {
   }
 };
 
-exports.updateProfile = async (req, res) => {
-  try {
-    const user_id = req.user_id;
-    let { user_name, password } = req.body;
-
-    if (!user_name) {
-      return res.status(400).send({
-        status: 400,
-        message: "Username cannot be empty.",
-      });
-    }
-
-    if (req.files && req.files.profile && req.files.profile.length > 0) {
-      const profileFilename = req.files.profile[0].filename;
-      const bucketFilePath = `profile/${profileFilename}`;
-      const localFilePath = `${req.files.profile[0].destination}${profileFilename}`;
-
-      await s3UploadImage(localFilePath, bucketFilePath);
-      req.body.profile = bucketFilePath;
-    }
-
-    if (password) {
-      req.body.password = await hashPassword(password);
-    }
-
-    const updateResult = await user.updateOne(
-      { _id: new ObjectId(user_id) },
-      req.body
-    );
-
-    if (updateResult.nModified > 0) {
-      const updatedUser = await user
-        .findOne({ _id: new ObjectId(user_id) })
-        .exec();
-      const token = await jwtToken(
-        updatedUser._id,
-        user_name,
-        updatedUser.email,
-        updatedUser.user_type,
-        "logged"
-      );
-
-      return res.status(200).send({
-        status: 200,
-        message: "Update success",
-        data: updatedUser,
-        token: token,
-        base_url: process.env.BASEURL,
-      });
-    } else {
-      return res.status(500).send({
-        status: 500,
-        message: "Update failed",
-      });
-    }
-  } catch (error) {
-    console.error("Error:", error.message);
-    return res.status(500).send({
-      status: 500,
-      message: "Internal Server Error",
-    });
-  }
-};
-exports.forgotPassword = async (req, res) => {
-  const { mobile, email } = req.body;
-
-  if (!mobile && !email) {
-    return res.status(400).send({
-      status: 400,
-      message: "Mobile or email must be provided.",
-    });
-  }
-
-  try {
-    // Check if the user exists
-    const existingUser = await user
-      .findOne({
-        $or: [{ mobile }, { email }],
-      })
-      .exec();
-    if (!existingUser) {
-      return res.status(404).send({
-        status: 404,
-        message: "User with this mobile number or email does not exist.",
-      });
-    }
-
-    // Generate OTP for resetting password
-    const otp = generateOTP();
-    // const otp = crypto.randomInt(100000, 999999).toString();
-
-    const otpEntry = new OTP({
-      otp,
-      mobile: mobile || null,
-      email: email || null,
-      expiresAt: new Date(Date.now() + 20 * 60 * 1000),
-    });
-
-    await otpEntry.save();
-
-    console.log(`OTP for ${mobile || email}: ${otp}`);
-
-    return res.status(200).send({
-      status: 200,
-      message:
-        "OTP sent successfully. Please verify the OTP to reset your password.",
-    });
-  } catch (error) {
-    console.error("Error:", error.message);
-    return res.status(500).send({
-      status: 500,
-      message: "Internal Server Error",
-    });
-  }
-};
 exports.verifyOTPAndResetPassword = async (req, res) => {
-  const { emailOrMobile, otp, newPassword } = req.body;
+  const { emailOrMobile, otp, newPassword, OTPID } = req.body;
 
-  if (!otp || !newPassword || !emailOrMobile) {
+  if (!emailOrMobile || !newPassword) {
     return res.status(400).send({
       status: 400,
-      message: "OTP, new password, and email or mobile number are required.",
+      message: "Email or mobile number and new password are required.",
     });
   }
 
   try {
-    let query;
-    if (isValidNumber(emailOrMobile)) {
-      query = { mobile: emailOrMobile };
-    } else {
-      query = { email: emailOrMobile };
-    }
+    const query = isValidNumber(emailOrMobile)
+      ? { mobile: emailOrMobile }
+      : { email: emailOrMobile };
 
-    // Find the OTP entry
-    const otpEntry = await OTP.findOne({
-      otp,
-      $or: [{ mobile: query.mobile || null }, { email: query.email || null }],
-    }).exec();
-
-    if (!otpEntry) {
-      return res.status(400).send({
-        status: 400,
-        message: "Invalid or expired OTP.",
-      });
-    }
-
-    // Check if OTP is expired
-    if (otpEntry.expiresAt < new Date()) {
-      return res.status(400).send({
-        status: 400,
-        message: "OTP has expired.",
-      });
-    }
-
-    // Find the user to update
     const userToUpdate = await user.findOne(query).exec();
 
     if (!userToUpdate) {
@@ -468,11 +318,27 @@ exports.verifyOTPAndResetPassword = async (req, res) => {
       });
     }
 
-    // Update the user's password directly (hashing is handled by the pre-save hook)
+    const { isOTPVerified: otpResponse, reason } = await verifyOTP({
+      phoneNumber: `91${userToUpdate.mobile}`,
+      orderId: OTPID,
+      otp,
+    });
+
+    console.log(
+      "🚀 ~ exports.verifyOTPAndResetPassword= ~ otpResponse:",
+      otpResponse
+    );
+    if (!otpResponse) {
+      return res.status(400).send({
+        status: 400,
+        message: "Invalid or expired OTP.",
+        error: reason,
+      });
+    }
+
+    // Update the user's password (hashing is handled by the pre-save hook)
     userToUpdate.password = newPassword;
     await userToUpdate.save();
-
-    await OTP.deleteOne({ _id: otpEntry._id });
 
     return res.status(200).send({
       status: 200,
@@ -516,14 +382,18 @@ exports.login = async (req, res) => {
     });
   }
 
+  if (mobile && !isValidMobileNumber(mobile)) {
+    return res.status(400).send({
+      status: 400,
+      message: "Invalid mobile number",
+    });
+  }
+
   try {
     const criteria =
       user_type === "admin"
         ? { email, user_type: "admin" }
-        : {
-            mobile,
-            user_type: "user",
-          };
+        : { mobile, user_type: "user" };
 
     const userfound = await findUser(criteria);
     console.log("🚀 ~ exports.login= ~ criteria:", criteria);
@@ -535,6 +405,7 @@ exports.login = async (req, res) => {
       });
     }
 
+    // Validate the user's credentials
     const { accessToken, refreshToken } = await validateUserCredentials(
       userfound,
       password
@@ -593,23 +464,20 @@ exports.forgotPassword = async (req, res) => {
       });
     }
 
-    // Generate a secure OTP
-    const otp = generateOtp();
-
-    // Create a new OTP entry
-    const otpEntry = new OTP({
-      otp,
-      mobile: userRecord.mobile || null,
-      email: userRecord.email || null,
-      expiresAt: new Date(Date.now() + 20 * 60 * 1000), // OTP valid for 20 minutes
+    const OTPID = generateOrderId();
+    const OtpRes = await sendOTP({
+      phoneNumber: `91${query.mobile}`,
+      orderId: OTPID,
     });
-
-    await otpEntry.save();
-
-    return res.status(200).send({
-      status: 200,
-      message: "OTP sent successfully.",
-    });
+    console.log(`OTP for ${query.mobile || query.email}: ${OtpRes.orderId}`);
+    if (OtpRes.orderId) {
+      return res.status(200).send({
+        status: 200,
+        message:
+          "OTP sent successfully. Please verify the OTP to reset your password.",
+        OTPID: OtpRes.orderId,
+      });
+    }
   } catch (error) {
     console.error("Error:", error.message);
     return res.status(500).send({
@@ -718,6 +586,46 @@ exports.getUserList = async (req, res) => {
     });
   }
 };
+exports.getUserById = async (req, res) => {
+  try {
+    const { _id: authUserId } = req.user;
+    const { id: clientID } = req.params;
+    const user_id = authUserId || clientID;
+    if (!user_id) {
+      return res.status(403).send({
+        status: 403,
+        message: "User not authorised.",
+      });
+    }
+
+    const result = await user.findById(user_id).select({
+      password: 0,
+      otp: 0,
+      createdDate: 0,
+      googleId: 0,
+    });
+
+    if (result) {
+      return res.status(200).send({
+        status: 200,
+        message: "success.",
+        data: result,
+        base_url: process.env.BASEURL,
+      });
+    } else {
+      return res.status(400).send({
+        status: 400,
+        message: "User not found.",
+      });
+    }
+  } catch (error) {
+    console.log("error", error.message);
+    return res.status(501).send({
+      status: 501,
+      message: "Internal Server Error.",
+    });
+  }
+};
 exports.SignrefreshToken = async (req, res) => {
   const { refresh_token } = req.body;
 
@@ -739,27 +647,149 @@ exports.SignrefreshToken = async (req, res) => {
     return res.status(440).json({ error: error.message });
   }
 };
-// exports.GoogleAuth = async (req, res) => {
-//   const { idToken } = req.body;
 
-//   try {
-//     const decodedToken = await FirebaseAdmin.auth().verifyIdToken(idToken);
-//     const uid = decodedToken.uid;
+exports.updateProfile = async (req, res) => {
+  const { user_id } = req.body;
+  const userId = user_id || req.user._id;
+  const {
+    email,
+    mobile,
+    name,
+    gender,
+    birth_date,
+    address,
+    city,
+    state,
+    country,
+    pincode,
+  } = req.body;
 
-//     const { email, name } = decodedToken;
+  try {
+    const userToUpdate = await user.findById(userId).select({
+      password: 0,
+      otp: 0,
+      createdDate: 0,
+      googleId: 0,
+    });
+    if (!userToUpdate) {
+      return res.status(404).json({
+        message: "User not found",
+      });
+    }
 
-//     // Handle your application logic (e.g., store user in database)
-//     // const user = await User.findOrCreate({ email });
+    if (email || mobile) {
+      const existingUser = await user.findOne({
+        $or: [{ email }, { mobile }],
+        _id: { $ne: userId },
+      });
 
-//     // Send success response
-//     res.status(200).json({
-//       message: "Login successful",
-//       user: { uid, email, name },
-//     });
-//   } catch (error) {
-//     console.error("Error verifying ID token:", error);
-//     res.status(401).json({
-//       message: "Unauthorized - Invalid ID token",
-//     });
-//   }
-// };
+      if (existingUser) {
+        return res.status(400).json({
+          message:
+            "Email or mobile number is already in use by another account.",
+        });
+      }
+    }
+    let uploadedImage = null;
+    if (req.files && req.files.profile) {
+      const uploadResult = await uploadAndSaveImage(
+        req,
+        "profile",
+        "public/assets/profile",
+        userToUpdate?.profile_image
+      );
+      if (!uploadResult.success) {
+        return res
+          .status(500)
+          .json({ status: 500, message: uploadResult.message });
+      }
+
+      uploadedImage = uploadResult.imageUrl;
+      console.log(
+        "🚀 ~ exports.updateProfile= ~ uploadedImage:",
+        req.files.profile
+      );
+    }
+    userToUpdate.name = name || userToUpdate.name;
+    userToUpdate.email = email || userToUpdate.email;
+    userToUpdate.mobile = mobile || userToUpdate.mobile;
+    userToUpdate.gender = gender || userToUpdate.gender;
+    userToUpdate.birth_date = birth_date || userToUpdate.birth_date;
+    userToUpdate.address = address || userToUpdate.address;
+    userToUpdate.city = city || userToUpdate.city;
+    userToUpdate.state = state || userToUpdate.state;
+    userToUpdate.country = country || userToUpdate.country;
+    userToUpdate.pincode = pincode || userToUpdate.pincode;
+    userToUpdate.profile_image = uploadedImage || userToUpdate.profile_image;
+
+    await userToUpdate.save();
+
+    return res.status(200).json({
+      message: "Profile updated successfully",
+      data: userToUpdate,
+    });
+  } catch (error) {
+    console.error("Error updating profile:", error);
+    return res.status(500).json({
+      message: "Server error",
+    });
+  }
+};
+
+exports.GoogleAuth = async (req, res) => {
+  const { idToken } = req.body;
+
+  try {
+    const decodedToken = await FirebaseAdmin.auth().verifyIdToken(idToken);
+    const { email, name, picture, phone_number, email_verified, uid } =
+      decodedToken;
+
+    const IsUserFound = await user.findOne({ email }).select({
+      password: 0,
+      otp: 0,
+      createdDate: 0,
+      googleId: 0,
+    });
+
+    if (!IsUserFound) {
+      const newUser = new user({
+        googleId: uid,
+        email,
+        name,
+        profile_image: picture,
+        mobile: phone_number || null,
+        verified: email_verified,
+        user_type: "user",
+      });
+      await newUser.save();
+
+      const { accessToken, refreshToken } = newUser.generateAuthToken();
+
+      return res.status(200).send({
+        status: 200,
+        message: "Signup successful.",
+        data: {
+          accessToken,
+          refreshToken,
+          user: newUser,
+        },
+      });
+    }
+
+    const { accessToken, refreshToken } = IsUserFound.generateAuthToken();
+    return res.status(200).send({
+      status: 200,
+      message: "Login successful.",
+      data: {
+        accessToken,
+        refreshToken,
+        user: { ...IsUserFound.toObject(), password: undefined }, // Exclude password
+      },
+    });
+  } catch (error) {
+    console.error("Error verifying ID token:", error);
+    res.status(401).json({
+      message: "Unauthorized - Invalid ID token",
+    });
+  }
+};

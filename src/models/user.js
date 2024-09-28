@@ -21,7 +21,13 @@ const dataSchema = new mongoose.Schema({
   },
   password: {
     type: String,
-    required: true,
+    required: function () {
+      return !this.googleId;
+    },
+  },
+  googleId: {
+    type: String,
+    required: false,
   },
   gender: {
     type: String,
@@ -88,11 +94,9 @@ dataSchema.methods.generateAuthToken = function () {
 };
 
 dataSchema.pre("save", async function (next) {
-  if (this.isModified("password") || this.isNew) {
-    console.log("this password", this.password);
+  if (!this.googleId && (this.isModified("password") || this.isNew)) {
     this.password = await hashPassword(this.password);
   }
-
   next();
 });
 

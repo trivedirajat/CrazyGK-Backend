@@ -50,7 +50,6 @@ const verifyTokenDb = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
-
     const UserDetails = await user.findById(decoded._id);
 
     if (!UserDetails) {

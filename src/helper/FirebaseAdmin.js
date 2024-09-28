@@ -1,10 +1,11 @@
-// // firebaseAdmin.js
-// const FirebaseAdmin = require("firebase-admin");
+const FirebaseAdmin = require("firebase-admin");
 
-// const serviceAccount = require("./path/to/your/serviceAccountKey.json");
+const serviceAccount = JSON.parse(
+  process.env.FIREBASE_SERVICE_ACCOUNT_KEY || "{}"
+);
 
-// FirebaseAdmin.initializeApp({
-//   credential: FirebaseAdmin.credential.cert(serviceAccount),
-// });
+FirebaseAdmin.initializeApp({
+  credential: FirebaseAdmin.credential.cert(serviceAccount),
+});
 
-// module.exports = FirebaseAdmin;
+module.exports = FirebaseAdmin;

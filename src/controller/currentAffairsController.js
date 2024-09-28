@@ -27,8 +27,16 @@ const addCurrentAffairs = async (req, res) => {
   }
 };
 const getCurrentAffairs = async (req, res) => {
-  const { type, date, topic, offset = 1, limit = 10, onlytopic } = req.query;
-  const page = Math.max(0, Number(offset) - 1); // Pages should start from 0 for pagination
+  const {
+    type,
+    date,
+    topic,
+    offset = 0,
+    limit = 10,
+    onlytopic,
+    topicquery,
+  } = req.query;
+  const page = Math.max(0, Number(offset));
   const perPage = Math.max(1, Number(limit));
   let projection = { toc: 0, description: 0 };
 
@@ -67,9 +75,10 @@ const getCurrentAffairs = async (req, res) => {
     }
     // If no query parameters are provided, return all current affairs
     total = await currentAffairs.countDocuments(query);
-
+    if (topicquery) {
+      query.topic = { $regex: topicquery, $options: "i" };
+    }
     const affairs = await currentAffairs
-
       .find(query)
       .select(projection)
       .sort({ createdDate: "desc" })
@@ -79,7 +88,7 @@ const getCurrentAffairs = async (req, res) => {
     return res.status(200).json({
       data: affairs,
       total_data: total,
-      current_page: page + 1, // Adjust for zero-based page index
+      current_page: page + 1,
       per_page: perPage,
       total_pages: Math.ceil(total / perPage),
     });

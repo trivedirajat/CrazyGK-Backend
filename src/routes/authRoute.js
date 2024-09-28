@@ -16,11 +16,12 @@ var {
   verifyUser,
   SignrefreshToken,
   GoogleAuth,
+  getUserById,
 } = require("../controller/authController");
 const multer = require("multer");
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, "public/assets/blog/");
+    cb(null, "public/assets/profile/");
   },
 
   filename: function (req, file, cb) {
@@ -38,11 +39,12 @@ router.post("/otpVerify", verifyOTPAndSignup);
 router.post("/resentOtp", resentOtp);
 router.post("/forgotPassword", forgotPassword);
 router.post("/updatePassword", verifyOTPAndResetPassword);
-router.post("/changePassword", verifyTokenDb, changePassword);
-router.post("/getUserList", verifyTokenDb, getUserList);
+router.post("/changePassword", changePassword);
+router.post("/getUserList", getUserList);
+router.get("/getuserbyid/:id", verifyTokenDb, getUserById);
 router.post("/refresh-token", SignrefreshToken);
-// router.post("/googleauth", GoogleAuth);
-router.post(
+router.post("/googleauth", GoogleAuth);
+router.put(
   "/updateProfile",
   verifyTokenDb,
   upload.fields([{ name: "profile" }]),

@@ -16,6 +16,18 @@ const dataScema = new mongoose.Schema({
     type: String,
     default: "",
   },
+  is_editorial: {
+    type: Boolean,
+    default: false,
+  },
+  toc: [
+    {
+      text: { type: String },
+      id: { type: String },
+      level: { type: String },
+    },
+  ],
+
   status: {
     type: Boolean,
     default: true,
