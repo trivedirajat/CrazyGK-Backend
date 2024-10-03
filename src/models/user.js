@@ -92,6 +92,10 @@ dataSchema.methods.generateAuthToken = function () {
 
   return { accessToken, refreshToken };
 };
+dataSchema.index(
+  { mobile: 1 },
+  { unique: true, partialFilterExpression: { mobile: { $ne: null } } }
+);
 
 dataSchema.pre("save", async function (next) {
   if (!this.googleId && (this.isModified("password") || this.isNew)) {

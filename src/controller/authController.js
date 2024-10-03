@@ -744,7 +744,7 @@ exports.GoogleAuth = async (req, res) => {
     const { email, name, picture, phone_number, email_verified, uid } =
       decodedToken;
 
-    const IsUserFound = await user.findOne({ email }).select({
+    const IsUserFound = await user.findOne({ email, name }).select({
       password: 0,
       otp: 0,
       createdDate: 0,
