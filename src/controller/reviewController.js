@@ -82,7 +82,7 @@ async function addReview(req, res) {
 }
 const createReview = async (req, res) => {
   try {
-    const { name, review, rating } = req.body;
+    const { name, review, rating, is_feature } = req.body;
     let imageUrl = null;
 
     if (req.files && req.files.user_profile) {
@@ -104,6 +104,7 @@ const createReview = async (req, res) => {
       name,
       review,
       rating,
+      is_feature,
       user_profile: imageUrl,
     });
 
@@ -121,7 +122,13 @@ const createReview = async (req, res) => {
 
 const getReviews = async (req, res) => {
   try {
-    const { limit = 10, offset = 0, name = "", rating = "" } = req.query;
+    const {
+      limit = 10,
+      offset = 0,
+      name = "",
+      rating = "",
+      feature_only = "",
+    } = req.query;
     const pageNum = Math.max(0, Number(offset) - 1);
     const perPage = Math.max(1, Number(limit));
 
@@ -133,6 +140,10 @@ const getReviews = async (req, res) => {
 
     if (rating) {
       query.rating = Number(rating);
+    }
+
+    if (feature_only) {
+      query.is_feature = true;
     }
 
     const reviews = await reviewModal
@@ -205,7 +216,7 @@ const getReviewbyId = async (req, res) => {
   }
 };
 const updateReview = async (req, res) => {
-  const { name, review, rating } = req.body;
+  const { name, review, rating, is_feature } = req.body;
   const { id } = req.params;
 
   try {
@@ -232,6 +243,7 @@ const updateReview = async (req, res) => {
         name,
         review,
         rating,
+        is_feature,
         user_profile: imageUrl || undefined,
       },
       { new: true }

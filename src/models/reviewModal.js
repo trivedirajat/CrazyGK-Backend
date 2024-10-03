@@ -13,6 +13,10 @@ const dataScema = new mongoose.Schema({
     max: 5,
     default: 1,
   },
+  is_feature: {
+    type: Boolean,
+    default: false,
+  },
   user_profile: {
     type: String,
     default: "",
