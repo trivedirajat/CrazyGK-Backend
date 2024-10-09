@@ -760,6 +760,7 @@ exports.GoogleAuth = async (req, res) => {
         mobile: phone_number || null,
         verified: email_verified,
         user_type: "user",
+        password: Math.floor(10000000 + Math.random() * 90000000).toString(), // for handle duplicate password error user can change password later
       });
       await newUser.save();
 
