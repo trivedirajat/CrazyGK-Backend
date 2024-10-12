@@ -1,13 +1,10 @@
 const mongoose = require("mongoose");
-const bcrypt = require("bcrypt");
-const jwt = require("jsonwebtoken");
 const {
   hashPassword,
   generateAccessToken,
   generateRefreshToken,
 } = require("../helper/helper");
 
-// Define your schema
 const dataSchema = new mongoose.Schema({
   user_name: {
     type: String,
@@ -58,6 +55,7 @@ const dataSchema = new mongoose.Schema({
   mobile: {
     type: Number,
     unique: true,
+    sparse: true,
   },
   otp: {
     type: Number,
@@ -85,22 +83,27 @@ const dataSchema = new mongoose.Schema({
   },
 });
 
-// Add method to generate JWT tokens
 dataSchema.methods.generateAuthToken = function () {
   const accessToken = generateAccessToken(this);
   const refreshToken = generateRefreshToken(this);
 
   return { accessToken, refreshToken };
 };
+
 dataSchema.index(
   { mobile: 1 },
-  { unique: true, partialFilterExpression: { mobile: { $ne: null } } }
+  { unique: true, partialFilterExpression: { mobile: { $exists: true } } }
 );
 
 dataSchema.pre("save", async function (next) {
   if (!this.googleId && (this.isModified("password") || this.isNew)) {
     this.password = await hashPassword(this.password);
   }
+
+  if (!this.mobile) {
+    this.mobile = undefined;
+  }
+
   next();
 });
 
